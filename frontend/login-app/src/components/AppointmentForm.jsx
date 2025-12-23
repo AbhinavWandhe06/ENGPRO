@@ -74,7 +74,8 @@ const AppointmentForm = () => {
         setLoading(true);
         setSubmitted(false);
         try {
-            const response = await axios.post('http://localhost:3001/save-appointment', formData);
+            const response = axios.post('http://localhost:5000/save-appointment', formData);
+
             console.log('Appointment saved:', response.data);
             setFormData({
                 name: '',

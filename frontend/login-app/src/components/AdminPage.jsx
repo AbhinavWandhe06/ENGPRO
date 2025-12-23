@@ -17,7 +17,7 @@ const AdminPage = () => {
 
   const fetchAppointmentsByStatus = async (status, setAppointments) => {
     try {
-      const response = await axios.get(`http://localhost:3001/appointments?status=${status}`);
+      const response = await axios.get(`http://localhost:5000/appointments?status=${status}`);
       setAppointments(response.data);
     } catch (error) {
       console.error('Error fetching appointments:', error);
@@ -26,7 +26,7 @@ const AdminPage = () => {
 
   const handleUpdateStatus = async (id, newStatus) => {
     try {
-      const response = await axios.put(`http://localhost:3001/appointments/${id}`, { status: newStatus });
+      const response = await axios.put(`http://localhost:5000/appointments/${id}`, { status: newStatus });
       const updatedAppointment = response.data;
 
       setPendingAppointments((prev) => prev.filter((appointment) => appointment.id !== id));

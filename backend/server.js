@@ -1,123 +1,140 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const bodyParser = require('body-parser');
-const cors = require('cors'); 
-const { Pool } = require('pg');
+const cors = require('cors');
+require('dotenv').config();
+
+const pool = require('./db'); // 👈 USE db.js
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
+/* =====================
+   MIDDLEWARE
+===================== */
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-app.use(cors({
-    origin: 'http://localhost:3000',
+app.use(
+  cors({
+    origin: [
+      'http://localhost:3000',
+      'https://your-site-name.netlify.app' // change after Netlify deploy
+    ],
     methods: ['GET', 'POST', 'PUT'],
     allowedHeaders: ['Content-Type'],
-}));
+  })
+);
 
-const pool = new Pool({
-    user: 'postgres',
-    host: 'localhost',
-    database: 'engapp',
-    password: 'Pass@123',
-    port: 5433,
-});
-
+/* =====================
+   NODEMAILER
+===================== */
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: 'abhinavwandhe@gmail.com',
-        pass: 'lkbd pzwr wrjf fdlc'
-    }
+  service: process.env.EMAIL_SERVICE,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
 });
 
-// Endpoint to save appointment and send emails
+/* =====================
+   SAVE APPOINTMENT
+===================== */
 app.post('/save-appointment', async (req, res) => {
-    const { name, email, phone, date, time, service, subService, message } = req.body;
+  const { name, email, phone, date, time, service, subService, message } = req.body;
 
-    try {
-        const client = await pool.connect();
-        const result = await client.query(
-            'INSERT INTO appointments (name, email, phone, date, time, service, sub_service, message, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
-            [name, email, phone, date, time, service, subService, message, 'pending']
-        );
-        const savedAppointment = result.rows[0];
-        client.release();
+  try {
+    const result = await pool.query(
+      `INSERT INTO appointments
+      (name, email, phone, date, time, service, sub_service, message, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      RETURNING *`,
+      [name, email, phone, date, time, service, subService, message, 'pending']
+    );
 
-        const customerMailOptions = {
-            from: 'abhinavwandhe@gmail.com',
-            to: email,
-            subject: 'Appointment Confirmation',
-            text: `Dear ${name},\n\nYour appointment for ${service} on ${date} at ${time} has been booked.\n\nThank you!\n\nBest regards,\nYour Company Name`
-        };
+    /* ---- Mail to customer ---- */
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Appointment Confirmation',
+      text: `Dear ${name},
 
-        const ownerMailOptions = {
-            from: 'abhinavwandhe@gmail.com',
-            to: 'abhinavwandhe01@gmail.com',
-            subject: 'New Appointment Booking',
-            text: `Dear Owner,\n\nA new appointment has been booked:\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\nDate: ${date}\nTime: ${time}\nService: ${service}\nSub Service: ${subService}\nMessage: ${message}\n\nBest regards,\nYour Company Name`
-        };
+Your appointment for ${service} on ${date} at ${time} has been booked.
 
-        transporter.sendMail(customerMailOptions, (error, info) => {
-            if (error) {
-                console.log(error);
-                res.status(500).send('Failed to send email to customer');
-            } else {
-                console.log('Email sent to customer: ' + info.response);
-                transporter.sendMail(ownerMailOptions, (error, info) => {
-                    if (error) {
-                        console.log(error);
-                        res.status(500).send('Failed to send email to owner');
-                    } else {
-                        console.log('Email sent to owner: ' + info.response);
-                        res.status(200).send('Appointment saved and emails sent successfully');
-                    }
-                });
-            }
-        });
-    } catch (err) {
-        console.error('Failed to save appointment:', err);
-        res.status(500).send('Failed to save appointment');
-    }
+Thank you!
+`,
+    });
+
+    /* ---- Mail to owner ---- */
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: 'abhinavwandhe01@gmail.com',
+      subject: 'New Appointment Booking',
+      text: `New Appointment Details:
+
+Name: ${name}
+Email: ${email}
+Phone: ${phone}
+Date: ${date}
+Time: ${time}
+Service: ${service}
+Sub Service: ${subService}
+Message: ${message}
+`,
+    });
+
+    res.status(200).json({
+      message: 'Appointment saved and emails sent successfully',
+      appointment: result.rows[0],
+    });
+  } catch (err) {
+    console.error('Error saving appointment:', err);
+    res.status(500).json({ error: 'Failed to save appointment' });
+  }
 });
 
-// Endpoint to fetch all appointments
+/* =====================
+   GET APPOINTMENTS
+===================== */
 app.get('/appointments', async (req, res) => {
-    const { status } = req.query; // Get the status from query parameters
-    try {
-        const client = await pool.connect();
-        const query = status ? 'SELECT * FROM appointments WHERE status = $1 ORDER BY date ASC' : 'SELECT * FROM appointments ORDER BY date ASC';
-        const result = await client.query(query, status ? [status] : []);
-        const appointments = result.rows;
-        client.release();
-        res.status(200).json(appointments);
-    } catch (err) {
-        console.error('Error fetching appointments:', err);
-        res.status(500).json({ error: 'Error fetching appointments' });
-    }
+  const { status } = req.query;
+
+  try {
+    const query = status
+      ? 'SELECT * FROM appointments WHERE status = $1 ORDER BY date ASC'
+      : 'SELECT * FROM appointments ORDER BY date ASC';
+
+    const result = await pool.query(query, status ? [status] : []);
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error('Error fetching appointments:', err);
+    res.status(500).json({ error: 'Error fetching appointments' });
+  }
 });
 
-// Endpoint to update appointment status (approve/reject)
+/* =====================
+   UPDATE STATUS
+===================== */
 app.put('/appointments/:id', async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
+  const { id } = req.params;
+  const { status } = req.body;
 
-    try {
-        const client = await pool.connect();
-        const result = await client.query(
-            'UPDATE appointments SET status = $1 WHERE id = $2 RETURNING *',
-            [status, id]
-        );
-        const updatedAppointment = result.rows[0];
-        client.release();
-        res.status(200).json(updatedAppointment);
-    } catch (err) {
-        console.error(`Error updating appointment ${id} status:`, err);
-        res.status(500).json({ error: `Error updating appointment ${id} status` });
-    }
+  try {
+    const result = await pool.query(
+      'UPDATE appointments SET status = $1 WHERE id = $2 RETURNING *',
+      [status, id]
+    );
+
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating appointment:', err);
+    res.status(500).json({ error: 'Error updating appointment' });
+  }
 });
 
+/* =====================
+   START SERVER
+===================== */
 app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+  console.log(`Server running on port ${port}`);
 });

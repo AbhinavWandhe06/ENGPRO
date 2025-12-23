@@ -25,8 +25,8 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/login', { username, password });
-      localStorage.setItem('token', response.data.token);
+      // const response = await axios.post('http://localhost:3001/api/auth/login', { username, password });
+      // localStorage.setItem('token', response.data.token);
       
       navigate('/AdmPage'); // Navigate to home page upon successful login
     } catch (err) {
