@@ -1,0 +1,1038 @@
+sakshisahare53: in the login i want that for particular vendor only his particular feature product hecan see
+
+GitHub Copilot: To implement this, you need to add a middleware that checks the vendor's identity and filters the features based on the vendor's ID. Here's a step-by-step plan:
+
+1. Add a middleware to authenticate the vendor.
+2. Modify the `/api/features` endpoint to filter features based on the vendor's ID.
+
+Let's start by adding a middleware for vendor authentication:
+
+```javascript
+
+
+// ...existing code...
+
+// Middleware to authenticate vendor
+function authenticateVendor(req, res, next) {
+  const vendorId = req.headers['vendor-id'];
+  if (!vendorId) {
+    return res.status(401).json({ error: "Vendor ID is required" });
+  }
+  req.vendorId = vendorId;
+  next();
+}
+
+// Use the middleware
+app.use(authenticateVendor);
+
+// ...existing code...
+```
+
+Next, modify the `/api/features` endpoint to filter features based on the vendor's ID:
+
+```javascript
+
+
+// ...existing code...
+
+app.get("/api/features", async (req, res) => {
+  logger.info(`Fetching features for vendor ${req.vendorId}`);
+  try {
+    const features = await getFeaturesByVendorId(req.vendorId);
+    res.json(features);
+  } catch (error) {
+    logger.error(`Error fetching features for vendor ${req.vendorId}: ${error.message}`);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// Function to get features by vendor ID
+async function getFeaturesByVendorId(vendorId) {
+  // Implement the logic to fetch features from the database based on vendorId
+  // This is a placeholder implementation
+  return [
+    // Example features
+    { id: 1, name: "Feature 1", vendorId: vendorId },
+    { id: 2, name: "Feature 2", vendorId: vendorId },
+  ];
+}
+
+// ...existing code...
+```
+
+Make sure to replace the placeholder implementation of `getFeaturesByVendorId` with the actual database query to fetch features based on the vendor ID.
+
+sakshisahare53: i am not able to see the products name in select products
+
+GitHub Copilot: It looks like there might be a typo in the 
+
+product.productId
+
+ property. Let's ensure that the correct property is being used to display the product names.
+
+Update the 
+
+ToggleButton
+
+ component to use the correct property for the product ID and name:
+
+```jsx
+
+
+// ...existing code...
+
+<ToggleButtonGroup
+  value={values.selectedProducts}
+  onChange={(_event, newSelectedProducts) =>
+    setFieldValue("selectedProducts", newSelectedProducts)
+  }
+  aria-label="Select Products"
+  name="selectedProducts"
+  sx={{ marginBottom: 2, display: "flex", flexWrap: "wrap" }}
+>
+  {Array.isArray(products) &&
+    products.map((product) => (
+      <ToggleButton
+        key={product.id} // Ensure this is the correct property for product ID
+        value={product.id} // Ensure this is the correct property for product ID
+        aria-label={`Product ${product.name}`} // Ensure this is the correct property for product name
+        style={
+          values.selectedProducts.includes(product.id)
+            ? selectedButtonStyle
+            : buttonStyle
+        }
+      >
+        {product.name} // Ensure this is the correct property for product name
+      </ToggleButton>
+    ))}
+</ToggleButtonGroup>
+
+// ...existing code...
+```
+
+Make sure that the 
+
+product
+
+ object has the correct properties (
+
+id
+
+ and 
+
+name
+
+) when it is being set in the 
+
+setProducts
+
+ function. If the properties are different, adjust them accordingly.
+
+sakshisahare53: getting this 
+Select Products
+At least one product must be selected 
+
+GitHub Copilot: It seems like the `products` array might not be populated correctly. Let's ensure that the `fetchData` function is correctly fetching and setting the products.
+
+First, verify that the `fetchData` function is correctly fetching the products and setting the state:
+
+```jsx
+
+
+// ...existing code...
+
+const fetchData = async () => {
+  setLoading(true);
+  try {
+    const entitlementsResponse = await fetch('/api/entitlements');
+    const productsResponse = await fetch('/api/products');
+    const entitlementsData = await entitlementsResponse.json();
+    const productsData = await productsResponse.json();
+
+    const { parsedEntitlements, cleanedProducts } = extractData(entitlementsData, productsData);
+
+    setEntitlements(parsedEntitlements);
+    setProducts(cleanedProducts);
+  } catch (error) {
+    console.error('Error fetching data:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+// ...existing code...
+```
+
+Next, ensure that the `extractData` function is correctly parsing the products:
+
+```jsx
+
+
+// ...existing code...
+
+const extractData = (entitlementsData, productsData) => {
+  const parsedEntitlements = parseEntitlements(
+    entitlementsData.entitlementList?.entitlement || []
+  );
+  const parsedProducts = parseProducts(
+    productsData.productList?.product || []
+  );
+
+  console.log("Parsed Entitlements:", parsedEntitlements);
+  console.log("Parsed Products:", parsedProducts);
+
+  // Clean up product features
+  const validFeatureIds = parsedProducts.flatMap((product) =>
+    product.features.map((feature) => feature.id)
+  );
+  const cleanedProducts = parsedProducts.map((product) => ({
+    ...product,
+    features: product.features.filter((feature) =>
+      validFeatureIds.includes(feature.id)
+    ),
+  }));
+
+  return { parsedEntitlements, cleanedProducts };
+};
+
+// ...existing code...
+```
+
+Finally, ensure that the `parseProducts` function is correctly parsing the product list:
+
+```jsx
+
+
+// ...existing code...
+
+const parseProducts = (productList) => {
+  if (!Array.isArray(productList)) return [];
+
+  return productList.map((product) => ({
+    id: product.productId, // Ensure this matches the actual property name
+    name: product.productName, // Ensure this matches the actual property name
+    features: product.features || [],
+  }));
+};
+
+// ...existing code...
+```
+
+After making these changes, ensure that the `products` state is correctly populated and that the `ToggleButtonGroup` is rendering the product names correctly. If the issue persists, add some console logs to debug the data being fetched and parsed.
+
+sakshisahare53: const { Pool, Client } = require("pg");
+
+// PostgreSQL server connection details
+const config = {
+  host: "localhost",
+  user: "postgres",
+  password: "admin",
+  port: 5432,
+};
+
+const databaseName = "LICENSESOLUTION";
+
+// Pool for database interactions
+const pool = new Pool({
+  ...config,
+  database: databaseName,
+});
+
+// Function to create the database if it doesn't exist
+const createDatabaseIfNotExists = async () => {
+  const client = new Client(config);
+
+  try {
+    await client.connect();
+    console.log("Connected to PostgreSQL server.");
+
+    const checkDbQuery = `
+      SELECT 1
+      FROM pg_database
+      WHERE datname = $1;
+    `;
+    const res = await client.query(checkDbQuery, [databaseName]);
+
+    if (res.rowCount === 0) {
+      const createDbQuery = `CREATE DATABASE "${databaseName}";`;
+      await client.query(createDbQuery);
+      console.log(`Database "${databaseName}" created successfully.`);
+    } else {
+      console.log(`Database "${databaseName}" already exists.`);
+    }
+  } catch (err) {
+    console.error("Error:", err.message);
+  } finally {
+    await client.end();
+    console.log("Connection closed.");
+  }
+};
+
+// Function to check if the 'users' table exists and create it if not
+const ensureUsersTableExists = async () => {
+  try {
+    const result = await pool.query(`
+      SELECT to_regclass('public.users');
+    `);
+    if (result.rows[0].to_regclass === null) {
+      console.log("Table does not exist, creating table...");
+      await pool.query(`
+        CREATE TABLE public.users (
+          User_Id SERIAL PRIMARY KEY,
+          Name VARCHAR(50) UNIQUE NOT NULL,
+          Password VARCHAR(255) NOT NULL,
+          category VARCHAR(10) CHECK (category IN ('vendor', 'end-user')) NOT NULL
+        );
+      `);
+      console.log("Table created successfully.");
+    } else {
+      console.log("Table already exists.");
+    }
+  } catch (err) {
+    console.error("Error ensuring users table:", err);
+  }
+};
+
+// Functions for user operations
+// const checkUserExists = async (username) => {
+//   try {
+//     const result = await pool.query(
+//       "SELECT * FROM public.users WHERE Name = $1",
+//       [username]
+//     );
+//     return result.rows.length > 0;
+//   } catch (err) {
+//     throw new Error("Error checking if user exists");
+//   }
+// };
+
+// const addUser = async (username, hashedPassword, category) => {
+//   try {
+//     await pool.query(
+//       "INSERT INTO public.users (Name, Password, category) VALUES ($1, $2, $3)",
+//       [username, hashedPassword, category]
+//     );
+//   } catch (err) {
+//     throw new Error("Error adding user to database");
+//   }
+// };
+
+// const getUserByUsername = async (username) => {
+//   try {
+//     const result = await pool.query(
+//       "SELECT * FROM public.users WHERE Name = $1",
+//       [username]
+//     );
+//     return result.rows[0];
+//   } catch (err) {
+//     throw new Error("Error retrieving user");
+//   }
+// };
+// Function to create the "Feature" table if it doesn't exist
+const ensureFeatureTableExists = async () => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const tableQuery = `
+    CREATE TABLE feature (
+        record_number SERIAL PRIMARY KEY,
+        feature_id INT UNIQUE,
+        feature_name VARCHAR(50)
+      );
+    `;
+    await client.query(tableQuery);
+    console.log("Feature table ensured.");
+  } catch (error) {
+    console.error("Error ensuring Feature table:", error.message);
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to insert a new feature into the "Feature" table
+const insertFeature = async (featureId, featureName) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const insertQuery = `
+      INSERT INTO Feature (Feature_Id, Feature_Name)
+      VALUES ($1, $2)
+    `;
+    await client.query(insertQuery, [featureId, featureName]);
+    console.log("Feature inserted:", featureId, featureName);
+  } catch (error) {
+    console.error("Error inserting feature:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to delete a feature from the "Feature" table
+const deleteFeature = async (featureId) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const deleteQuery = `
+      DELETE FROM Feature WHERE Feature_Id = $1
+    `;
+    await client.query(deleteQuery, [featureId]);
+    console.log("Feature deleted:", featureId);
+  } catch (error) {
+    console.error("Error deleting feature:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to retrieve all features from the "Feature" table
+const getAllFeatureDetailsFromDb = async () => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const featureRes = await client.query("SELECT * FROM Feature");
+    const features = featureRes.rows.map((feature) => ({
+      featureId: feature.feature_id,
+      featureName: feature.feature_name,
+    }));
+    console.log("Features fetched:", features);
+    return features;
+  } catch (error) {
+    console.error(`Error retrieving features: ${error.message}`);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to create the "Product" table if it doesn't exist
+const ensureProductTableExists = async () => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const tableQuery = `
+      CREATE TABLE IF NOT EXISTS Product (
+        Product_Record_Number SERIAL PRIMARY KEY,
+        Product_Id INT UNIQUE,
+        Product_Name VARCHAR(100) NOT NULL,
+        Features TEXT
+      );
+    `;
+    await client.query(tableQuery);
+    console.log("Product table ensured.");
+  } catch (error) {
+    console.error("Error ensuring Product table:", error.message);
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to insert a new product into the "Product" table
+const insertProduct = async (productId, productName, features) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const insertQuery = `
+      INSERT INTO Product (Product_Id, Product_Name, Features)
+      VALUES ($1, $2, $3);
+    `;
+    console.log(`Inserting Product: ${productId}, ${productName}, ${features}`); // Log the data being inserted
+    await client.query(insertQuery, [productId, productName, features]);
+    console.log("Product inserted:", productId, productName, features);
+  } catch (error) {
+    console.error("Error inserting product:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to delete a product from the "Product" table
+const deleteProduct = async (productId) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const deleteQuery = `
+      DELETE FROM Product WHERE Product_Id = $1;
+    `;
+    await client.query(deleteQuery, [productId]);
+    console.log("Product deleted:", productId);
+  } catch (error) {
+    console.error("Error deleting product:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to retrieve all products from the "Product" table
+const getAllProductsFromDb = async () => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const productRes = await client.query("SELECT * FROM Product");
+    const products = productRes.rows.map((product) => ({
+      productId: product.product_id,
+      productName: product.product_name,
+      features: product.features,
+    }));
+    console.log("Products fetched:", products);
+    return products;
+  } catch (error) {
+    console.error(`Error retrieving products: ${error.message}`);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+const ensureEntitlementTableExists = async () => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const tableQuery = `
+      CREATE TABLE IF NOT EXISTS Entitlement (
+        Entitlement_Record_Number SERIAL PRIMARY KEY,
+        Entitlement_Id INT UNIQUE,
+        Date_Created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        Products TEXT NOT NULL
+      );
+    `;
+    await client.query(tableQuery);
+    console.log("Entitlement table ensured.");
+  } catch (error) {
+    console.error("Error ensuring Entitlement table:", error.message);
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to insert a new entitlement into the "Entitlement" table
+const insertEntitlement = async (entitlementId, products) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const insertQuery = `
+      INSERT INTO Entitlement (Entitlement_Id, Products)
+      VALUES ($1, $2);
+    `;
+    await client.query(insertQuery, [entitlementId, JSON.stringify(products)]);
+    console.log("Entitlement inserted:", entitlementId, products);
+  } catch (error) {
+    console.error("Error inserting entitlement:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to delete an entitlement from the "Entitlement" table
+const deleteEntitlement = async (entitlementId) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const deleteQuery = `
+      DELETE FROM Entitlement WHERE Entitlement_Id = $1;
+    `;
+    await client.query(deleteQuery, [entitlementId]);
+    console.log("Entitlement deleted:", entitlementId);
+  } catch (error) {
+    console.error("Error deleting entitlement:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to retrieve all entitlements from the "Entitlement" table
+const getAllEntitlementsFromDb = async () => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    // Corrected SQL query
+    const entitlementRes = await client.query(`
+      SELECT 
+        Entitlement_Id AS "entitlementId", 
+        Date_Created AS "dateCreated", 
+        Products AS "products" 
+      FROM Entitlement;
+    `);
+
+    // Ensure products are parsed and returned properly
+    const entitlements = entitlementRes.rows.map((entitlement) => ({
+      entitlementId: entitlement.entitlementId,
+      dateCreated: entitlement.dateCreated,
+      products: JSON.parse(entitlement.products || "[]"), // Parse products if they are stored as JSON
+    }));
+
+    console.log("Entitlements fetched:", entitlements);
+    return entitlements;
+  } catch (error) {
+    console.error(`Error retrieving entitlements: ${error.message}`);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// const jwt = require("jsonwebtoken");
+// const authenticateVendor = (req, res, next) => {
+//   const token = req.headers.authorization?.split(" ")[1];
+//   if (!token) {
+//     return res.status(401).json({ error: "Unauthorized" });
+//   }
+//   try {
+//     const decoded = jwt.verify(token, "YOUR_SECRET_KEY");
+//     req.vendorId = decoded.vendorId; // Store VendorID in the request object
+//     next();
+//   } catch (err) {
+//     res.status(403).json({ error: "Invalid token" });
+//   }
+// };
+// module.exports = authenticateVendor;
+
+// Ensure tables exist on startup
+(async () => {
+  await createDatabaseIfNotExists();
+  await ensureUsersTableExists();
+  await ensureFeatureTableExists();
+  await createDatabaseIfNotExists();
+  await ensureFeatureTableExists(); // Feature Table
+  await ensureProductTableExists(); // Product Table
+  await ensureEntitlementTableExists(); // Entitlement Table
+})();
+
+module.exports = {
+  // checkUserExists,
+  // addUser,
+  // getUserByUsername,
+  ensureFeatureTableExists,
+  insertFeature,
+  ensureFeatureTableExists,
+  insertFeature,
+  deleteFeature,
+  getAllFeatureDetailsFromDb,
+  ensureProductTableExists,
+  insertProduct,
+  deleteProduct,
+  getAllProductsFromDb,
+  ensureEntitlementTableExists,
+  insertEntitlement,
+  deleteEntitlement,
+  getAllEntitlementsFromDb,
+};
+this is the database
+now tell the entitlement page
+
+GitHub Copilot: To ensure that the products are correctly fetched and displayed in the `EntitlementPage` component, you need to make sure that the `fetchData` function is correctly fetching the products from the backend and setting the state. Here's how you can do it:
+
+1. **Fetch Products and Entitlements from the Backend:**
+
+Update the `fetchData` function to fetch products and entitlements from the backend API.
+
+2. **Set the Products State:**
+
+Ensure that the products are correctly set in the state.
+
+3. **Render the Products in the Select Products Section:**
+
+Make sure the products are rendered correctly in the `ToggleButtonGroup`.
+
+Here is the updated `EntitlementPage.jsx`:
+
+```jsx
+
+
+import React, { useState, useEffect } from "react";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import * as Yup from "yup";
+import { useFormik } from "formik";
+
+const validationSchema = Yup.object({
+  entitlementId: Yup.string().required("Entitlement ID is required"),
+  selectedProducts: Yup.array()
+    .min(1, "At least one product must be selected")
+    .required("Products are required"),
+});
+
+const EntitlementPage = () => {
+  const [entitlements, setEntitlements] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const entitlementsResponse = await fetch('/api/entitlements');
+      const productsResponse = await fetch('/api/products');
+      const entitlementsData = await entitlementsResponse.json();
+      const productsData = await productsResponse.json();
+
+      setEntitlements(entitlementsData);
+      setProducts(productsData);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formik = useFormik({
+    initialValues: {
+      entitlementId: '',
+      selectedProducts: [],
+    },
+    validationSchema: validationSchema,
+    onSubmit: (values) => {
+      console.log('Form values:', values);
+    },
+  });
+
+  return (
+    <div>
+      <h1>Entitlement Page</h1>
+      <form onSubmit={formik.handleSubmit}>
+        <div>
+          <label htmlFor="entitlementId">Entitlement ID</label>
+          <input
+            id="entitlementId"
+            name="entitlementId"
+            type="text"
+            onChange={formik.handleChange}
+            value={formik.values.entitlementId}
+          />
+          {formik.errors.entitlementId ? <div>{formik.errors.entitlementId}</div> : null}
+        </div>
+        <div>
+          <label>Select Products</label>
+          <ToggleButtonGroup
+            value={formik.values.selectedProducts}
+            onChange={(_event, newSelectedProducts) =>
+              formik.setFieldValue("selectedProducts", newSelectedProducts)
+            }
+            aria-label="Select Products"
+            name="selectedProducts"
+            sx={{ marginBottom: 2, display: "flex", flexWrap: "wrap" }}
+          >
+            {Array.isArray(products) &&
+              products.map((product) => (
+                <ToggleButton
+                  key={product.productId}
+                  value={product.productId}
+                  aria-label={`Product ${product.productName}`}
+                  style={
+                    formik.values.selectedProducts.includes(product.productId)
+                      ? { backgroundColor: "lightblue" }
+                      : { backgroundColor: "white" }
+                  }
+                >
+                  {product.productName}
+                </ToggleButton>
+              ))}
+          </ToggleButtonGroup>
+          {formik.errors.selectedProducts ? <div>{formik.errors.selectedProducts}</div> : null}
+        </div>
+        <button type="submit">Submit</button>
+      </form>
+    </div>
+  );
+};
+
+export default EntitlementPage;
+```
+
+### Explanation:
+
+1. **Fetching Data:**
+   - The `fetchData` function fetches entitlements and products from the backend API and sets the state.
+
+2. **Formik for Form Handling:**
+   - The `useFormik` hook is used to handle form state and validation.
+
+3. **Rendering Products:**
+   - The `ToggleButtonGroup` component renders the products fetched from the backend.
+   - The `ToggleButton` components are created for each product, using `product.productId` and `product.productName`.
+
+4. **Validation:**
+   - The `validationSchema` ensures that at least one product is selected.
+
+Make sure your backend API endpoints (`/api/entitlements` and `/api/products`) are correctly implemented and returning the expected data.
+
+sakshisahare53: this is the app.js file 
+
+
+GitHub Copilot: To ensure that a particular vendor can only see their specific feature products, you need to:
+
+1. Add a middleware to authenticate the vendor.
+2. Modify the `/api/features` and `/api/products` endpoints to filter data based on the vendor's ID.
+
+Here's how you can do it:
+
+### Step 1: Add Middleware for Vendor Authentication
+
+First, add a middleware function to authenticate the vendor using JWT.
+
+```javascript
+
+
+const authenticateVendor = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    const decoded = jwt.verify(token, "yourSecretKey");
+    req.vendorId = decoded.vendorId; // Store VendorID in the request object
+    next();
+  } catch (err) {
+    res.status(403).json({ error: "Invalid token" });
+  }
+};
+
+// Use the middleware for protected routes
+app.use(authenticateVendor);
+```
+
+### Step 2: Modify Endpoints to Filter Data Based on Vendor ID
+
+Update the `/api/features` and `/api/products` endpoints to filter data based on the vendor's ID.
+
+```javascript
+
+
+// ...existing code...
+
+// ** Feature Endpoints **
+app.get("/api/features", async (req, res) => {
+  logger.info(`Fetching features for vendor ${req.vendorId}`);
+  try {
+    const features = await getAllFeatureDetailsFromDb(req.vendorId);
+    res.json({ features });
+  } catch (error) {
+    logger.error(`Error fetching features: ${error.message}`);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ** Product Endpoints **
+app.get("/api/products", async (req, res) => {
+  logger.info(`Fetching products for vendor ${req.vendorId}`);
+  try {
+    const products = await getAllProductsFromDb(req.vendorId);
+    res.json({ products });
+  } catch (error) {
+    logger.error(`Error fetching products: ${error.message}`);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ...existing code...
+```
+
+### Step 3: Update Database Functions to Filter by Vendor ID
+
+Ensure that the database functions 
+
+getAllFeatureDetailsFromDb
+
+ and 
+
+getAllProductsFromDb
+
+ filter data based on the vendor's ID.
+
+```javascript
+
+
+const getAllFeatureDetailsFromDb = async (vendorId) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const featureRes = await client.query(`
+      SELECT * FROM Feature WHERE vendor_id = $1
+    `, [vendorId]);
+    const features = featureRes.rows.map((feature) => ({
+      featureId: feature.feature_id,
+      featureName: feature.feature_name,
+    }));
+    console.log("Features fetched:", features);
+    return features;
+  } catch (error) {
+    console.error(`Error retrieving features: ${error.message}`);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+const getAllProductsFromDb = async (vendorId) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const productRes = await client.query(`
+      SELECT * FROM Product WHERE vendor_id = $1
+    `, [vendorId]);
+    const products = productRes.rows.map((product) => ({
+      productId: product.product_id,
+      productName: product.product_name,
+      features: product.features,
+    }));
+    console.log("Products fetched:", products);
+    return products;
+  } catch (error) {
+    console.error(`Error retrieving products: ${error.message}`);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// ...existing code...
+```
+
+### Step 4: Ensure Vendor ID is Included in Feature and Product Tables
+
+Make sure that the `Feature` and `Product` tables include a `vendor_id` column to store the vendor's ID.
+
+```sql
+-- Add vendor_id column to Feature table
+ALTER TABLE Feature ADD COLUMN vendor_id INT;
+
+-- Add vendor_id column to Product table
+ALTER TABLE Product ADD COLUMN vendor_id INT;
+```
+
+### Step 5: Update Insert Functions to Include Vendor ID
+
+Ensure that the insert functions for features and products include the vendor's ID.
+
+```javascript
+
+
+const insertFeature = async (featureId, featureName, vendorId) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const insertQuery = `
+      INSERT INTO Feature (Feature_Id, Feature_Name, vendor_id)
+      VALUES ($1, $2, $3)
+    `;
+    await client.query(insertQuery, [featureId, featureName, vendorId]);
+    console.log("Feature inserted:", featureId, featureName);
+  } catch (error) {
+    console.error("Error inserting feature:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+const insertProduct = async (productId, productName, features, vendorId) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const insertQuery = `
+      INSERT INTO Product (Product_Id, Product_Name, Features, vendor_id)
+      VALUES ($1, $2, $3, $4);
+    `;
+    await client.query(insertQuery, [productId, productName, features, vendorId]);
+    console.log("Product inserted:", productId, productName, features);
+  } catch (error) {
+    console.error("Error inserting product:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// ...existing code...
+```
+
+With these changes, the application will ensure that each vendor can only see their specific feature products.
+
+Similar code found with 1 license type

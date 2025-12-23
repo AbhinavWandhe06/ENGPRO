@@ -1,0 +1,100 @@
+@import url('https://fonts.googleapis.com/css2?family=Playwrite+GB+S:ital,wght@0,100..400;1,100..400&display=swap');
+
+.event-management-container {
+    margin-left: 10%;
+    margin-right: 10%;
+}
+
+.custom-card-elec::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.5); 
+    transition: background-color 0.3s, opacity 0.3s;
+    z-index: 0;
+}
+
+.custom-card-elec:hover::before {
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.custom-content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    box-sizing: border-box;
+    transition: height 0.5s;
+}
+
+.custom-title {
+    font-size: 1.5rem;
+    margin-bottom: 10px;
+    color: #000; /* Initial color (black) */
+    transition: color 0.3s; /* Smooth transition for color change */
+}
+
+.custom-description {
+    font-size: 1rem;
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: opacity 0.5s, max-height 0.5s;
+    color: #c5ebf1; /* Initial color (black) */
+}
+
+.custom-card-elec:hover {
+    height: 300px;
+}
+
+.custom-card-elec:hover .custom-description {
+    opacity: 1;
+    max-height: 250px;
+}
+
+.custom-card-elec:hover .custom-title {
+    color: #fff; /* Color changes to white on hover */
+}
+
+.event-management-wrapper {
+    text-align: center; /* Center align the content */
+    margin-bottom: 40px; /* Add spacing below the section */
+}
+
+.event-management-title {
+   
+    color: #333; /* Dark color for the title */
+
+}
+
+.event-management-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.custom-card-elec {
+    position: relative;
+    width: 300px;
+    height: 200px;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    display: inline-block;
+    vertical-align: top;
+    background-image: url('../assets/electrical.jpg'); /* Replace with your image path */
+    background-size: cover;
+    background-position: center;
+    transition: height 0.5s, box-shadow 0.3s;
+}

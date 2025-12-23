@@ -1,0 +1,69 @@
+const express = require('express');
+const nodemailer = require('nodemailer');
+const bodyParser = require('body-parser');
+const cors = require('cors'); // Import CORS middleware
+
+const app = express();
+const port = 3001; // Example port, adjust as needed
+
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// CORS middleware configuration
+app.use(cors({
+    origin: 'http://localhost:3000', // Allow requests from localhost:3000
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type'],
+}));
+
+// Replace with your email service details
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: 'abhinavwandhe@gmail.com',
+        pass: 'lkbd pzwr wrjf fdlc'
+    }
+});
+
+app.post('/send-email', (req, res) => {
+    const { name, email, phone, date, time, service, subService, message } = req.body;
+
+    // Construct email message for customer
+    const customerMailOptions = {
+        from: 'abhinavwandhe@gmail.com',
+        to: email,
+        subject: 'Appointment Confirmation',
+        text: `Dear ${name},\n\nYour appointment for ${service} on ${date} at ${time} has been booked.\n\nThank you!\n\nBest regards,\nYour Company Name`
+    };
+
+    // Construct email message for owner
+    const ownerMailOptions = {
+        from: 'abhinavwandhe@gmail.com',
+        to: 'abhinavwandhe01@gmail.com', // Replace with owner's email
+        subject: 'New Appointment Booking',
+        text: `Dear Owner,\n\nA new appointment has been booked:\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\nDate: ${date}\nTime: ${time}\nService: ${service}\nSub Service: ${subService}\nMessage: ${message}\n\nBest regards,\nYour Company Name`
+    };
+
+    // Send emails
+    transporter.sendMail(customerMailOptions, (error, info) => {
+        if (error) {
+            console.log(error);
+            res.status(500).send('Failed to send email to customer');
+        } else {
+            console.log('Email sent to customer: ' + info.response);
+            transporter.sendMail(ownerMailOptions, (error, info) => {
+                if (error) {
+                    console.log(error);
+                    res.status(500).send('Failed to send email to owner');
+                } else {
+                    console.log('Email sent to owner: ' + info.response);
+                    res.status(200).send('Emails sent successfully');
+                }
+            });
+        }
+    });
+});
+
+app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
+});

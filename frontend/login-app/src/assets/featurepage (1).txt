@@ -1,0 +1,324 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { xml2js, js2xml } from 'xml-js';
+import { useFormik } from 'formik';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { TextField, Button, Container, IconButton, CardContent, Card, Table, TableBody, TableCell, TableHead, TableRow, Paper, Typography, Box, CircularProgress, Alert, ToggleButton, ToggleButtonGroup } from '@mui/material';
+
+const LicenseComponent = () => {
+  const [features, setFeatures] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [entitlements, setEntitlements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const { featuresData, productsData, entitlementsData } = await loadXMLData();
+        setFeatures(extractFeatures(featuresData));
+        setProducts(extractProducts(productsData));
+        setEntitlements(extractEntitlements(entitlementsData));
+        setLoading(false);
+      } catch (error) {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+
+  const formik = useFormik({
+    initialValues: {
+      featureId: '',
+      featureName: '',
+      // businessModel: '',
+      // subscriptionOptions: '',
+      // executionCount: '',
+      // timeOption: '',
+    },
+    onSubmit: async (values, { resetForm }) => {
+      const errors = {};
+
+      if (!values.featureId) {
+        errors.featureId = 'Feature ID is required';
+      } else if (isNaN(values.featureId)) {
+        errors.featureId = 'Feature ID must be a number';
+      } else if (features.some((feature) => feature.featureId === values.featureId.toString())) {
+        errors.featureId = 'Feature ID already exists';
+      }
+
+      if (!values.featureName) {
+        errors.featureName = 'Feature Name is required';
+      }
+
+
+      if (Object.keys(errors).length > 0) {
+        formik.setErrors(errors);
+        return;
+      }
+
+      setSubmitLoading(true);
+      setSuccessMessage('');
+
+      const newFeature = {
+        featureId: values.featureId,
+        featureName: values.featureName,
+      };
+      const updatedFeatures = [...features, newFeature];
+
+      const xmlObj = {
+        featureList: {
+          feature: updatedFeatures.map((feat) => {
+            const featureAttributes = {
+              featureId: feat.featureId,
+              featureName: feat.featureName,
+            };
+            return { _attributes: featureAttributes };
+          }),
+        },
+      };
+
+      const updatedXml = `<?xml version="1.0" encoding="UTF-8" ?>\n${js2xml(xmlObj, { compact: true, spaces: 4 })}`;
+
+      try {
+        await axios.post('http://localhost:5001/api/features', updatedXml, {
+          headers: { 'Content-Type': 'application/xml' },
+        });
+
+        setFeatures(updatedFeatures);
+        setSuccessMessage('Feature added successfully!');
+        resetForm();
+      } catch (error) {
+        toast.error('Error updating XML file');
+      } finally {
+        setSubmitLoading(false);
+      }
+    },
+  });
+
+  const loadXMLData = async () => {
+    try {
+      const [featuresResponse, productsResponse, entitlementsResponse] = await Promise.all([
+        axios.get('http://localhost:5001/api/features', { responseType: 'text' }),
+        axios.get('http://localhost:5001/api/products', { responseType: 'text' }),
+        axios.get('http://localhost:5001/api/entitlements', { responseType: 'text' })
+      ]);
+
+      return {
+        featuresData: featuresResponse.data,
+        productsData: productsResponse.data,
+        entitlementsData: entitlementsResponse.data,
+      };
+    } catch (error) {
+      toast.error('Error loading XML data');
+      throw error;
+    }
+  };
+
+  const extractFeatures = (featuresData) => {
+    const featuresResult = xml2js(featuresData, { compact: true, spaces: 4 });
+    return featuresResult.featureList?.feature
+      ? Array.isArray(featuresResult.featureList.feature)
+        ? featuresResult.featureList.feature.map((feat) => ({
+          featureId: feat._attributes.featureId,
+          featureName: feat._attributes.featureName,
+        }))
+        : [{
+          featureId: featuresResult.featureList.feature._attributes.featureId,
+          featureName: featuresResult.featureList.feature._attributes.featureName,
+        }]
+      : [];
+  };
+
+
+  const extractProducts = (productsData) => {
+    const productsResult = xml2js(productsData, { compact: true, spaces: 4 });
+    const productsArray = productsResult.productList?.product
+      ? Array.isArray(productsResult.productList.product)
+        ? productsResult.productList.product
+        : [productsResult.productList.product]
+      : [];
+
+    return productsArray.map((prod) => ({
+      productId: prod._attributes.productId,
+      productName: prod._attributes.productName,
+      ProductFeatures: Array.isArray(prod.featureList.feature)
+        ? prod.featureList.feature.map(f => f._attributes.featureId)
+        : [prod.featureList.feature._attributes.featureId],
+    }));
+  };
+
+  const extractEntitlements = (entitlementsData) => {
+    const entitlementsResult = xml2js(entitlementsData, { compact: true, spaces: 4 });
+    return entitlementsResult.entitlementList?.entitlement
+      ? Array.isArray(entitlementsResult.entitlementList.entitlement)
+        ? entitlementsResult.entitlementList.entitlement
+        : [entitlementsResult.entitlementList.entitlement]
+      : [];
+  };
+
+  const handleDelete = async (featureId) => {
+    const isFeatureInEntitlement = entitlements.some(entitlement => {
+      const productList = Array.isArray(entitlement.productList.product)
+        ? entitlement.productList.product
+        : [entitlement.productList.product];
+      return productList.some(product => {
+        const featureList = Array.isArray(product.featureList.feature)
+          ? product.featureList.feature
+          : [product.featureList.feature];
+        return featureList.some(feature => feature._attributes.featureId === featureId);
+      });
+    });
+
+    if (isFeatureInEntitlement) {
+      toast.error('Cannot delete feature as it is part of a product that is included in an entitlement.');
+      return;
+    }
+
+    setLoading(true);
+    setSuccessMessage('');
+
+    const updatedFeatures = features.filter((feature) => feature.featureId !== featureId);
+
+    const xmlObj = {
+      featureList: {
+        feature: updatedFeatures.map((feat) => ({
+          _attributes: {
+            featureId: feat.featureId,
+            featureName: feat.featureName,
+          },
+        })),
+      },
+    };
+
+    const updatedXml = `<?xml version="1.0" encoding="UTF-8" ?>\n${js2xml(xmlObj, { compact: true, spaces: 4 })}`;
+
+    try {
+      await axios.post('http://localhost:5001/api/features', updatedXml, {
+        headers: { 'Content-Type': 'application/xml' },
+      });
+
+      // Reload the XML data
+      const { featuresData } = await loadXMLData();
+      setFeatures(extractFeatures(featuresData));
+      setSuccessMessage('Feature deleted successfully!');
+    } catch (error) {
+      toast.error('Error updating XML file');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  const buttonStyle = {
+    flex: '1 1 20%', // Each button takes up 20% of the container's width
+    margin: '4px', // Adjust the margin as needed
+    boxSizing: 'border-box', // Ensures padding and border are included in the width
+    border: '1px solid #808080', // Customize the border color and width
+    borderRadius: '4px', // Rounded corners
+    transition: 'background-color 0.3s, color 0.3s', // Smooth transition for hover effects
+  };
+
+  const selectedButtonStyle = {
+    ...buttonStyle,
+    // backgroundColor: '#456456', // Background color when selected
+    // color: '#fff', // Text color when selected
+    // borderColor: '#0056b3', // Border color when selected
+  };
+  if (loading) return <CircularProgress />;
+
+  return (
+    <Container>
+      <Box sx={{ mt: 4, mb: 2 }}>
+        <Typography variant="h4" gutterBottom>
+          Add New Feature
+        </Typography>
+        <form onSubmit={formik.handleSubmit}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+            <TextField
+              label="Feature ID"
+              variant="outlined"
+              name="featureId"
+              type="text"
+              value={formik.values.featureId}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              error={formik.touched.featureId && Boolean(formik.errors.featureId)}
+              helperText={formik.touched.featureId && formik.errors.featureId}
+              fullWidth
+            />
+            <TextField
+              label="Feature Name"
+              variant="outlined"
+              name="featureName"
+              type="text"
+              value={formik.values.featureName}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              error={formik.touched.featureName && Boolean(formik.errors.featureName)}
+              helperText={formik.touched.featureName && formik.errors.featureName}
+              fullWidth
+            />
+          </Box>
+         
+          
+          <Box sx={{ mt: 2 }}>
+            <Button type="submit" variant="contained" color="primary" disabled={submitLoading}>
+              {submitLoading ? <CircularProgress size={24} /> : 'Add Feature'}
+            </Button>
+          </Box>
+        </form>
+        {successMessage && <Alert severity="success" sx={{ mt: 2 }}>{successMessage}</Alert>}
+      </Box>
+      <Card>
+        <CardContent>
+          <Typography variant="h5" gutterBottom sx={{ mt: 4 }}>
+            Feature List
+          </Typography>
+          <Paper>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Feature ID</TableCell>
+                  <TableCell>Feature Name</TableCell>
+                  {/* <TableCell>Business Model</TableCell> */}
+                  <TableCell width={7}></TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {features.length > 0 ? (
+                  features.map((feature) => (
+                    <TableRow key={feature.featureId}>
+                      <TableCell>{feature.featureId}</TableCell>
+                      <TableCell>{feature.featureName}</TableCell>
+                      {/* <TableCell>{feature.businessModel}</TableCell> */}
+                      <TableCell>
+                        <IconButton onClick={() => handleDelete(feature.featureId)}>
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={3} align="center">
+                      Nothing added yet
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Paper>
+        </CardContent>
+      </Card>
+      <ToastContainer />
+    </Container>
+  );
+};
+
+export default LicenseComponent;

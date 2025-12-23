@@ -1,0 +1,332 @@
+Server.js
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const bodyParser = require("body-parser");
+const {
+  checkAndCreateTable,
+  checkUserExists,
+  addUser,
+  getUserByUsername,
+} = require("./Database/userDatabase");
+
+const app = express();
+app.use(bodyParser.json());
+
+function validatePassword(password) {
+  const regex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  return regex.test(password);
+}
+
+// Register route
+app.post("/register", async (req, res) => {
+  const { username, password, category } = req.body;
+
+  if (!validatePassword(password)) {
+    return res.status(400).json({
+      message:
+        "Password must have at least one uppercase letter, one number, and one special character.",
+    });
+  }
+
+  try {
+    const userExists = await checkUserExists(username);
+    if (userExists) {
+      return res.status(400).json({ message: "Username already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await addUser(username, hashedPassword, category);
+    res.status(201).json({ message: "User registered successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Login route
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const user = await getUserByUsername(username);
+    if (!user) {
+      return res.status(400).json({ message: "Invalid username or password" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid username or password" });
+    }
+
+    const token = jwt.sign(
+      { userId: user.userid, username: user.username, category: user.category },
+      "yourSecretKey",
+      { expiresIn: "1h" }
+    );
+    res.status(200).json({ message: "Login successful", token });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Initialize table before starting the server
+checkAndCreateTable().then(() => {
+  app.listen(5000, () => {
+    console.log("Server running on port 5000");
+  });
+});
+
+----------------------------------------------------
+
+userDatabase.js 
+
+const { Pool } = require('pg');
+
+// Database connection
+const pool = new Pool({
+  user: 'postgres', 
+  host: 'localhost',
+  database: 'LICENSESOLUTION', 
+  password: 'admin', 
+  port: 5432,
+});
+
+// Function to check if the 'users' table exists and create it if not
+const checkAndCreateTable = async () => {
+  try {
+    const result = await pool.query(`
+     SELECT to_regclass('public.users');
+   `);
+    if (result.rows[0].to_regclass === null) {
+      console.log("Table does not exist, creating table...");
+      await pool.query(`
+       CREATE TABLE public.users (
+         User_Id SERIAL PRIMARY KEY,
+         Name VARCHAR(50) UNIQUE NOT NULL,
+         Password VARCHAR(255) NOT NULL,
+         category VARCHAR(10) CHECK (category IN ('vendor', 'end-user')) NOT NULL
+       );
+     `);
+      console.log("Table created successfully.");
+    } else {
+      console.log("Table already exists.");
+    }
+  } catch (err) {
+    console.error("Error checking or creating table:", err);
+  }
+};
+
+// Function to check if the user already exists
+const checkUserExists = async (username) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM public.users WHERE Name = $1",
+      [username]
+    );
+    return result.rows.length > 0;
+  } catch (err) {
+    throw new Error("Error checking if user exists");
+  }
+};
+
+// Function to add a new user
+const addUser = async (username, hashedPassword, category) => {
+  try {
+    await pool.query(
+      "INSERT INTO public.users (Name, Password, category) VALUES ($1, $2, $3)",
+      [username, hashedPassword, category]
+    );
+  } catch (err) {
+    throw new Error("Error adding user to database");
+  }
+};
+
+// Function to get a user by username
+const getUserByUsername = async (username) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM public.users WHERE Name = $1",
+      [username]
+    );
+    return result.rows[0];
+  } catch (err) {
+    throw new Error("Error retrieving user");
+  }
+};
+
+module.exports = {
+  checkAndCreateTable,
+  checkUserExists,
+  addUser,
+  getUserByUsername,
+};
+
+----------------------------------------------------------
+
+Login.jsx
+
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+
+const LoginPage = () => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!username || !password) {
+      setError("Both fields are required");
+      return;
+    }
+    try {
+      const response = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await response.json();
+      if (data.token) {
+        setError("");
+        alert("Login successful");
+      } else {
+        setError(data.message || "Login failed");
+      }
+    } catch (err) {
+      setError("An error occurred. Please try again.");
+      console.error(err);
+    }
+  };
+
+  return (
+    <div className="login-page">
+      <h2>Login</h2>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      <form onSubmit={handleLogin}>
+        <div>
+          <label htmlFor="username">Username</label>
+          <input
+            type="text"
+            id="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+        <button type="submit">Login</button>
+      </form>
+      <p>
+        Don't have an account? <Link to="/signup">Sign up here</Link>
+      </p>
+    </div>
+  );
+};
+
+export default LoginPage;
+
+
+-------------------------------------------------------------
+
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+
+const SignupPage = () => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [category, setCategory] = useState("");
+  const [error, setError] = useState("");
+
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    if (!username || !password || !category) {
+      setError("All fields are required");
+      return;
+    }
+
+    const passwordValidation = /^(?=.*[A-Z])(?=.*[!@#$%^&*])/;
+    if (!passwordValidation.test(password)) {
+      setError(
+        "Password must contain at least one capital letter and one special character"
+      );
+      return;
+    }
+
+    try {
+      const response = await fetch("http://localhost:5000/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password, category }),
+      });
+      const data = await response.json();
+      if (data.message) {
+        setError("");
+        alert("Registration successful");
+      } else {
+        setError(data.message || "Registration failed");
+      }
+    } catch (err) {
+      setError("An error occurred. Please try again.");
+      console.error(err);
+    }
+  };
+
+  return (
+    <div className="signup-page">
+      <h2>Sign Up</h2>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      <form onSubmit={handleSignup}>
+        <div>
+          <label htmlFor="username">Username</label>
+          <input
+            type="text"
+            id="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="category">Category</label>
+          <select
+            id="category"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            required
+          >
+            <option value="">Select...</option>
+            <option value="vendor">Vendor</option>
+            <option value="end-user">End User</option>
+          </select>
+        </div>
+        <button type="submit">Sign Up</button>
+      </form>
+      <p>
+        Already have an account? <Link to="/login">Login here</Link>
+      </p>
+    </div>
+  );
+};
+
+export default SignupPage;

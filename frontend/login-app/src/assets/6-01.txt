@@ -1,0 +1,283 @@
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import {
+  Box,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Button,
+  Modal,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+  TextField,
+  Card,
+  CardContent,
+  CardActions,
+  CircularProgress,
+  Alert,
+} from "@mui/material";
+import { Formik, Form } from "formik";
+import * as Yup from "yup";
+
+// Generate unique ID for entitlement
+const generateUniqueId = () =>
+  Math.random().toString(36).substring(2, 10).toUpperCase();
+
+const EntitlementPage = () => {
+  const [entitlements, setEntitlements] = useState([]);
+  const [selectedEntitlement, setSelectedEntitlement] = useState(null);
+  const [openModal, setOpenModal] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [error, setError] = useState("");
+
+  // Fetch products filtered by vendor ID
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoadingProducts(true);
+      setError("");
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          setError("No token found. Please log in again.");
+          return;
+        }
+
+        const response = await axios.get("http://localhost:5001/api/products", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        setProducts(response.data.products || []);
+      } catch (err) {
+        setError("Failed to fetch products. Please try again later.");
+        console.error("Error fetching products:", err);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  const validationSchema = Yup.object({
+    entitlementId: Yup.string().required("Entitlement ID is required"),
+    selectedProducts: Yup.array()
+      .min(1, "At least one product must be selected")
+      .required("Products are required"),
+  });
+
+  const handleAddEntitlement = async (values, actions) => {
+    try {
+      const selectedProducts = products.filter((product) =>
+        values.selectedProducts.includes(product.productId)
+      );
+
+      const productIds = selectedProducts.map((product) => product.p_id);
+      const userId = localStorage.getItem("userId"); // Assumes user ID is stored in localStorage
+
+      // Set current date as a fallback
+      const currentDate = new Date().toISOString();
+
+      const response = await axios.post(
+        "http://localhost:5001/api/entitlements",
+        {
+          entitlementId: values.entitlementId,
+          dates: [currentDate], // Ensure that a date is sent here
+          selectedProducts: productIds,
+          vendorId: userId,
+        },
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }
+      );
+
+      // On success, update the UI
+      setEntitlements((prev) => [
+        ...prev,
+        {
+          entitlementId: values.entitlementId,
+          products: selectedProducts,
+          dateCreated: currentDate,
+        },
+      ]);
+      setOpenModal(false);
+      actions.resetForm();
+      setError(""); // Clear any errors on success
+    } catch (err) {
+      setError("Failed to create entitlement. Please try again.");
+      console.error("Error creating entitlement:", err.response || err); // Log detailed error
+    }
+  };
+
+  return (
+    <Box className="container">
+      <Card className="card">
+        <CardContent>
+          <Typography variant="h6">Entitlements</Typography>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Entitlement ID</TableCell>
+                <TableCell>Products</TableCell>
+                <TableCell>Date Created</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {entitlements.length > 0 ? (
+                entitlements.map((ent) => (
+                  <TableRow
+                    key={ent.entitlementId}
+                    onClick={() => setSelectedEntitlement(ent)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <TableCell>{ent.entitlementId}</TableCell>
+                    <TableCell>
+                      {ent.products.map((prod) => prod.productName).join(", ")}
+                    </TableCell>
+                    <TableCell>
+                      {new Date(ent.dateCreated).toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={3} align="center">
+                    No entitlements added yet
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+        <CardActions>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => setOpenModal(true)}
+          >
+            Create Entitlement
+          </Button>
+        </CardActions>
+      </Card>
+
+      <Card className="card">
+        <CardContent>
+          {selectedEntitlement ? (
+            <>
+              <Typography variant="h6">Entitlement Details</Typography>
+              <Typography variant="subtitle1">
+                ID: {selectedEntitlement.entitlementId}
+              </Typography>
+              <Typography variant="subtitle1">
+                Date Created:{" "}
+                {new Date(selectedEntitlement.dateCreated).toLocaleString()}
+              </Typography>
+              <Typography variant="subtitle1">Products:</Typography>
+              {selectedEntitlement.products.map((product) => (
+                <Typography key={product.productId}>
+                  - {product.productName}
+                </Typography>
+              ))}
+            </>
+          ) : (
+            <Typography variant="h6">
+              Select an entitlement to view details
+            </Typography>
+          )}
+        </CardContent>
+      </Card>
+
+      <Modal open={openModal} onClose={() => setOpenModal(false)}>
+        <Box
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            padding: 4,
+            backgroundColor: "white",
+            maxWidth: 600,
+            borderRadius: 1,
+          }}
+        >
+          <Formik
+            initialValues={{
+              entitlementId: generateUniqueId(),
+              selectedProducts: [],
+            }}
+            validationSchema={validationSchema}
+            onSubmit={handleAddEntitlement}
+          >
+            {({ values, setFieldValue, touched, errors }) => (
+              <Form>
+                <Typography variant="h6">Add Entitlement</Typography>
+
+                <TextField
+                  label="Entitlement ID"
+                  name="entitlementId"
+                  value={values.entitlementId}
+                  disabled
+                  fullWidth
+                  margin="normal"
+                />
+
+                <Typography variant="subtitle1" sx={{ marginBottom: 2 }}>
+                  Select Products
+                </Typography>
+
+                {loadingProducts ? (
+                  <CircularProgress />
+                ) : error ? (
+                  <Alert severity="error">{error}</Alert>
+                ) : (
+                  <ToggleButtonGroup
+                    value={values.selectedProducts}
+                    onChange={(_event, newSelectedProducts) =>
+                      setFieldValue("selectedProducts", newSelectedProducts)
+                    }
+                    aria-label="Select Products"
+                    name="selectedProducts"
+                    sx={{ marginBottom: 2, display: "flex", flexWrap: "wrap" }}
+                  >
+                    {products.length > 0 ? (
+                      products.map((product) => (
+                        <ToggleButton
+                          key={product.productId}
+                          value={product.productId}
+                          aria-label={`Product ${product.productName}`}
+                        >
+                          {product.productName}
+                        </ToggleButton>
+                      ))
+                    ) : (
+                      <Typography>No products available</Typography>
+                    )}
+                  </ToggleButtonGroup>
+                )}
+
+                {touched.selectedProducts && errors.selectedProducts && (
+                  <Typography
+                    variant="body2"
+                    color="error"
+                    sx={{ marginBottom: 2 }}
+                  >
+                    {errors.selectedProducts}
+                  </Typography>
+                )}
+
+                <Button variant="contained" color="primary" type="submit">
+                  Add Entitlement
+                </Button>
+              </Form>
+            )}
+          </Formik>
+        </Box>
+      </Modal>
+    </Box>
+  );
+};
+
+export default EntitlementPage;

@@ -1,0 +1,235 @@
+import React, { useState, useEffect } from "react";
+import {
+  TextField,
+  Button,
+  Container,
+  Typography,
+  Box,
+  Grid,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+} from "@mui/material";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import CloseIcon from "@mui/icons-material/Close";
+import axios from "axios";
+
+const AddUserBatchForm = () => {
+  const [userId, setUserId] = useState("");
+  const [username, setUsername] = useState("");
+  const [batchCode, setBatchCode] = useState(""); // Initially empty, will be populated with available codes
+  const [batchOptions, setBatchOptions] = useState([]); // Initialize as empty array
+  const [dialogOpen, setDialogOpen] = useState(false); // State for dialog visibility
+  const [dialogMessage, setDialogMessage] = useState(""); // State for the message in dialog
+  const [dialogType, setDialogType] = useState("success"); // Dialog type: 'success' or 'error'
+  const token = localStorage.getItem("token"); // Retrieve token from local storage
+
+  useEffect(() => {
+    // Fetch available batch codes from the API
+    const fetchBatchOptions = async () => {
+      try {
+        const response = await axios.get("http://localhost:5001/api/batches", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setBatchOptions(response.data.batches || []); // Ensure batches is an array
+      } catch (error) {
+        setDialogMessage("Failed to fetch batch options.");
+        setDialogType("error");
+        setDialogOpen(true);
+      }
+    };
+
+    fetchBatchOptions();
+  }, []);
+
+  const handleAddUserBatch = async () => {
+    try {
+      const response = await axios.post(
+        "http://localhost:5001/api/add-user-batch",
+        { userId, username, batchCode },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.status === 201) {
+        setDialogMessage("User batch added successfully!");
+        setDialogType("success");
+        setDialogOpen(true); // Open dialog on success
+      }
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message || "Error adding user to batch.";
+      setDialogMessage(errorMessage);
+      setDialogType("error");
+      setDialogOpen(true); // Open dialog on error
+    }
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    handleAddUserBatch();
+  };
+
+  const handleDialogClose = () => {
+    setDialogOpen(false); // Close the dialog
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: -80,
+        backgroundColor: "rgba(10, 25, 50, 0.9)", // Dark blue background with opacity
+        backdropFilter: "blur(8px)",
+        paddingTop: 50,
+        paddingBottom: 50,
+      }}
+    >
+      <Container
+        maxWidth="sm"
+        sx={{
+          padding: "2rem",
+          borderRadius: "8px",
+          boxShadow: "0 4px 10px rgba(0, 0, 0, 0.1)",
+          mt: 4,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "50vh",
+          marginTop: "12vh",
+          backgroundColor: "rgba(10, 25, 50, 0.9)",
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <Typography
+          variant="h4"
+          sx={{
+            mb: 2,
+            fontWeight: "bold",
+            textAlign: "center",
+            color: "white",
+          }}
+        >
+          Add User to Batch
+        </Typography>
+
+        <form onSubmit={handleSubmit}>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="User ID"
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                required
+                variant="outlined"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                variant="outlined"
+              />
+            </Grid>
+
+            {/* Batch Code Dropdown */}
+            <Grid item xs={12}>
+              <FormControl fullWidth variant="outlined" required>
+                <InputLabel>Batch Code</InputLabel>
+                <Select
+                  value={batchCode}
+                  onChange={(e) => setBatchCode(e.target.value)}
+                  label="Batch Code"
+                >
+                  {batchOptions.length > 0 ? (
+                    batchOptions.map((batch) => (
+                      <MenuItem key={batch.batchCode} value={batch.batchCode}>
+                        {batch.batchCode}
+                      </MenuItem>
+                    ))
+                  ) : (
+                    <MenuItem disabled>No batch codes available</MenuItem>
+                  )}
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              mt: 3,
+            }}
+          >
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              sx={{
+                padding: "0.75rem 2rem",
+                fontWeight: "bold",
+              }}
+            >
+              Add User to Batch
+            </Button>
+          </Box>
+        </form>
+      </Container>
+
+      {/* Dialog for Success/Error Message */}
+      <Dialog
+        open={dialogOpen}
+        onClose={handleDialogClose}
+        aria-labelledby="dialog-title"
+      >
+        <DialogTitle
+          id="dialog-title"
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            {dialogType === "success" ? (
+              <CheckCircleOutlineIcon color="success" sx={{ mr: 1 }} />
+            ) : (
+              <ErrorOutlineIcon color="error" sx={{ mr: 1 }} />
+            )}
+            <Typography variant="h6">
+              {dialogType === "success" ? "Success" : "Error"}
+            </Typography>
+          </Box>
+          <IconButton onClick={handleDialogClose}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1">{dialogMessage}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleDialogClose}
+            variant="contained"
+            color={dialogType === "success" ? "success" : "error"}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </div>
+  );
+};
+
+export default AddUserBatchForm;

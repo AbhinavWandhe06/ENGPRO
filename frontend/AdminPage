@@ -1,0 +1,73 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+
+const AdminPage = () => {
+  const navigate = useNavigate();
+  const [appointments, setAppointments] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('pending'); // Default status filter
+
+  useEffect(() => {
+    fetchAppointmentsByStatus(statusFilter);
+  }, [statusFilter]);
+   
+  const fetchAppointmentsByStatus = async (status) => {
+    try {
+      const response = await axios.get(`http://localhost:3001/appointments?status=${status}`);
+      setAppointments(response.data);
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+    }
+  };
+
+  const handleUpdateStatus = async (id, newStatus) => {
+    try {
+      await axios.put(`http://localhost:3001/appointments/${id}/status`, { status: newStatus });
+      // Optionally, update state or re-fetch appointments
+      fetchAppointmentsByStatus(statusFilter);
+    } catch (error) {
+      console.error(`Error updating status for appointment ${id}:`, error);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token'); // Clear token from local st  orage
+    navigate('/login'); // Redirect to login page
+  };
+
+  return (
+    <div>
+      <h2>Admin Dasssshboard</h2>
+      <button onClick={handleLogout}>Logout</button>
+      <div>
+        <label>Filter by Status:</label>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="pending">Pendings</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+      <div>
+        <h3>Appointments ({statusFilter})</h3>
+        <ul>
+          {appointments.map(appointment => (
+            <li key={appointment.id}>
+              <div>Name: {appointment.name}</div>
+              <div>Email: {appointment.email}</div>
+              <div>Date: {appointment.date}</div>
+              <div>Time: {appointment.time}</div>
+              <div>Service: {appointment.service}</div>
+              <div>Status: {appointment.status}</div>
+              <div>
+                <button onClick={() => handleUpdateStatus(appointment.id, 'approved')}>Approve</button>
+                <button onClick={() => handleUpdateStatus(appointment.id, 'rejected')}>Reject</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+};
+
+export default AdminPage;

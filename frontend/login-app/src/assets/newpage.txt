@@ -1,0 +1,1897 @@
+Database
+
+const { Pool } = require("pg");
+
+// Database configuration
+const config = {
+  user: "postgres", // Database username
+  host: "localhost", // Database host
+  database: "licensesolution", // Database name
+  password: "admin", // Database password
+  port: 5432, // Database port (make sure this is correct)
+};
+
+// Initialize the Pool for better performance
+const pool = new Pool(config);
+
+// Test the connection
+pool
+  .connect()
+  .then((client) => {
+    console.log("Database connected successfully");
+    client.release();
+  })
+  .catch((err) => console.error("Error connecting to the database:", err));
+
+// Function to insert a new user without a password
+const insertUserWithoutPassword = async (userId, username) => {
+  try {
+    const role = "end-user"; // Default role
+    console.log(
+      `Inserting user with ID: ${userId}, Username: ${username}, Role: ${role}`
+    );
+    const query = `INSERT INTO users (user_id, username, role) VALUES ($1, $2, $3)`;
+    await pool.query(query, [userId, username, role]);
+    console.log("User inserted:", userId, username, role);
+  } catch (error) {
+    console.error("Error inserting user:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert a new feature
+
+const insertFeature = async (featureId, featureName, vendorId) => {
+  try {
+    console.log("Fetching v_id for user_id:", vendorId);
+    // Validate featureId
+    if (
+      !featureId ||
+      typeof featureId !== "string" ||
+      featureId.trim() === ""
+    ) {
+      throw new Error("Invalid Feature ID. It must be a non-empty string.");
+    }
+    // Check if the feature already exists for the given vendor
+    const existingFeature = await pool.query(
+      "SELECT * FROM feature WHERE feature_id = $1 AND v_id = $2",
+
+      [featureId, vendorId]
+    );
+    if (existingFeature.rows.length > 0) {
+      throw new Error("Feature with this ID already exists for the vendor.");
+    }
+    // Insert the new feature
+    const insertQuery = `INSERT INTO feature (feature_id, feature_name, v_id) VALUES ($1, $2, $3)`;
+    await pool.query(insertQuery, [featureId, featureName, vendorId]);
+    console.log("Feature inserted:", featureId, featureName, vendorId);
+  } catch (error) {
+    console.error("Error inserting feature:", error.message);
+
+    throw error; // Rethrow the error so the calling function can handle it
+  }
+};
+
+// Function to delete a feature
+const deleteFeature = async (featureId) => {
+  try {
+    // Get `f_id` from `feature_id`
+    const feature = await pool.query(
+      `SELECT f_id FROM feature WHERE f_id = $1`,
+      [featureId]
+    );
+    if (feature.rows.length === 0) {
+      throw new Error("Feature not found.");
+    }
+    const f_id = feature.rows[0].f_id;
+    // Check if `f_id` is linked in `feature_product_map`
+    const linkedProduct = await pool.query(
+      `SELECT * FROM feature_product_map WHERE f_id = $1`,
+      [f_id]
+    );
+    console.log("Linked Product:", linkedProduct.rows); // Debug log
+
+    if (linkedProduct.rows.length > 0) {
+      throw new Error("Feature is linked to a product and cannot be deleted.");
+    }
+
+    // Proceed with deletion if no linked products
+
+    const deleteQuery = `DELETE FROM feature WHERE f_id = $1`;
+
+    await pool.query(deleteQuery, [f_id]);
+
+    console.log("Feature deleted:", f_id);
+  } catch (error) {
+    console.error("Error deleting feature:", error.message);
+
+    throw error;
+  }
+};
+
+// Function to get all feature details from the database
+const getAllFeatureDetailsFromDb = async () => {
+  try {
+    const featureRes = await pool.query(
+      "SELECT f_id, feature_id, feature_name, v_id FROM feature"
+    );
+    return featureRes.rows.map((feature) => ({
+      f_id: feature.f_id,
+      featureId: feature.feature_id,
+      featureName: feature.feature_name,
+      vendorId: feature.v_id,
+    }));
+  } catch (error) {
+    console.error("Error retrieving features:", error.message);
+    throw error;
+  }
+};
+
+// Function to get features by vendor
+const getFeaturesByVendor = async (vendorId) => {
+  try {
+    console.log("Retrieving features for vendor:", vendorId);
+    const query =
+      "SELECT f_id, feature_id, feature_name FROM feature WHERE v_id = $1";
+    const res = await pool.query(query, [vendorId]);
+    return res.rows.map((feature) => ({
+      f_id: feature.f_id,
+      featureId: feature.feature_id,
+      featureName: feature.feature_name,
+    }));
+  } catch (error) {
+    console.error("Error retrieving vendor features:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert a user (with role validation)
+// const insertUser = async (
+//   userId,
+//   username,
+//   password,
+//   vendorId,
+//   role = "end-user"
+// ) => {
+//   try {
+//     if (!vendorId) {
+//       // Check if vendorId is valid
+//       throw new Error("Vendor ID is required when adding a user.");
+//     }
+//     // Check if the user already exists for this vendor
+//     const checkQuery = `SELECT 1 FROM users WHERE user_id = $1 AND v_id = $2`; // Efficient check
+//     const checkResult = await pool.query(checkQuery, [userId, vendorId]);
+
+//     if (checkResult.rows.length > 0) {
+//       throw new Error("User with this ID already exists for this vendor.");
+//     }
+//     const query = `INSERT INTO users (user_id, username, password,v_id, role) VALUES ($1, $2, $3, $4, $5)`;
+//     await pool.query(query, [userId, username, password, vendorId, role]);
+//     console.log("User inserted:", userId, username, vendorId, role);
+//   } catch (error) {
+//     console.error("Error inserting user:", error.message);
+//     throw error;
+//   }
+// };
+
+// Function to insert a new user
+// Function to insert a new user
+const insertUser = async (userId, username, vendorId, role = "end-user") => {
+  try {
+    const query = `
+      INSERT INTO users (user_id, username, v_id, role)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *;
+    `;
+    const values = [userId, username, vendorId, role];
+    const result = await pool.query(query, values);
+    return result.rows[0];
+  } catch (error) {
+    console.error("Error inserting user:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert user into user_batch table
+const insertUserBatch = async (userId, batchId) => {
+  try {
+    const query = `INSERT INTO user_batch_map (u_id, b_id) VALUES ($1, $2)`;
+    await pool.query(query, [userId, batchId]);
+    console.log("User added to batch:", userId, batchId);
+  } catch (error) {
+    console.error("Error inserting into user_batch_map:", error.message);
+    throw error;
+  }
+};
+
+// const getUserBatch = async (userId) => {
+//   try {
+//     const query = `SELECT * FROM user_batch_map WHERE user_id = $1`;
+//     const res = await pool.query(query, [userId]);
+//     return res.rows;
+//   } catch (error) {
+//     console.error("Error retrieving user batch:", error.message);
+//     throw error;
+//   }
+// };
+
+const getUserBatch = async (vendorId) => {
+  try {
+    const query = `
+      SELECT u.user_id, u.username, b.batch_code, b.batch_name
+      FROM users u
+      JOIN user_batch_map ubm ON u.user_id = ubm.u_id
+      JOIN batch b ON ubm.b_id = b.b_id
+      WHERE u.v_id = $1
+    `;
+    const values = [vendorId];
+    const result = await pool.query(query, values);
+    return result.rows;
+  } catch (error) {
+    console.error("Error fetching user batch:", error.message);
+    throw error;
+  }
+};
+
+// Function to get user by user ID
+const getUserByUserId = async (userId) => {
+  try {
+    const query = "SELECT * FROM users WHERE user_id = $1";
+    const res = await pool.query(query, [userId]);
+    return res.rows[0];
+  } catch (error) {
+    console.error("Error retrieving user:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert a new product into the "Product" table
+
+const insertProduct = async (productId, productName, vendorId) => {
+  const query = `
+    INSERT INTO product (product_id, product_name, v_id)
+    VALUES ($1, $2, $3)
+    RETURNING *;
+  `;
+  const values = [productId, productName, vendorId];
+  const result = await pool.query(query, values);
+  return result.rows[0]; // Returns the newly inserted product, including the p_id
+};
+
+const insertMapping = async (featureId, productId, vendorId) => {
+  const query = `
+    INSERT INTO feature_product_map (f_id, p_id, v_id)
+    VALUES ($1, $2, $3);
+  `;
+  const values = [featureId, productId, vendorId];
+  await pool.query(query, values);
+};
+
+// Function to delete a product from the "Product" table
+const deleteProduct = async (productId) => {
+  try {
+    // Get `p_id` from `product_id`
+    const product = await pool.query(
+      `SELECT p_id FROM product WHERE product_id = $1`,
+      [productId]
+    );
+    if (product.rows.length === 0) {
+      throw new Error("Product not found.");
+    }
+    const p_id = product.rows[0].p_id;
+    // Check if `p_id` is linked in `product_ent_map`
+    const linkedEntitlement = await pool.query(
+      `SELECT * FROM product_ent_map WHERE p_id = $1`,
+      [p_id]
+    );
+    console.log("Linked Entitlement:", linkedEntitlement.rows); // Debug log
+    if (linkedEntitlement.rows.length > 0) {
+      throw new Error(
+        "Product is linked to an entitlement and cannot be deleted."
+      );
+    }
+    // Proceed with deletion if not linked to any entitlement
+    const deleteQuery = `DELETE FROM product WHERE p_id = $1`;
+    await pool.query(deleteQuery, [p_id]);
+    console.log("Product deleted:", p_id);
+  } catch (error) {
+    console.error("Error deleting product:", error.message);
+    throw error;
+  }
+};
+
+// Function to retrieve all products from the "Product" table
+const getAllProducts = async () => {
+  try {
+    const productRes = await pool.query("SELECT * FROM product");
+    return productRes.rows.map((product) => ({
+      p_id: product.p_id,
+      productId: product.product_id,
+      productName: product.product_name,
+      vendorId: product.v_id,
+    }));
+  } catch (error) {
+    console.error("Error retrieving products:", error.message);
+    throw error;
+  }
+};
+
+// Function to retrieve products by vendor
+const getProductsByVendor = async (vendorId) => {
+  try {
+    const query = "SELECT * FROM product WHERE v_id = $1";
+    const res = await pool.query(query, [vendorId]);
+    return res.rows.map((product) => ({
+      p_id: product.p_id,
+      productId: product.product_id,
+      productName: product.product_name,
+      vendorId: product.v_id,
+    }));
+  } catch (error) {
+    console.error("Error retrieving vendor products:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert a new batch with v_id
+const insertBatch = async (batchCode, batchName, vendorId) => {
+  try {
+    // Validate the batchCode to ensure it is within the allowed range
+    if (batchCode < 1000000 || batchCode > 9999999) {
+      throw new Error("Batch Code must be between 1,000,000 and 9,999,999");
+    }
+
+    // Validate vendorId and ensure it's provided
+    if (!vendorId) {
+      throw new Error("Vendor ID is required");
+    }
+
+    // Insert batch with batch_code, batch_name, and v_id
+    const query = `
+      INSERT INTO batch (batch_code, batch_name, v_id) 
+      VALUES ($1, $2, $3)
+    `;
+
+    await pool.query(query, [batchCode, batchName, vendorId]);
+    console.log(
+      "Batch inserted with code:",
+      batchCode,
+      "name:",
+      batchName,
+      "vendor ID:",
+      vendorId
+    );
+  } catch (error) {
+    console.error("Error inserting batch:", error.message);
+    throw error;
+  }
+};
+
+// Function to retrieve all batches
+const getAllBatches = async () => {
+  try {
+    const res = await pool.query("SELECT * FROM batch");
+    return res.rows.map((batch) => ({
+      batchId: batch.b_id,
+      batchCode: batch.batch_code,
+      batchName: batch.batch_name,
+      vendorId: batch.v_id,
+    }));
+  } catch (error) {
+    console.error("Error retrieving batches:", error.message);
+    throw error;
+  }
+};
+// Function to retrieve a batch by ID
+const getBatchById = async (batchId) => {
+  try {
+    const query = `SELECT * FROM batch WHERE b_id = $1`;
+    const res = await pool.query(query, [batchId]);
+
+    if (!res.rows.length) {
+      throw new Error(`Batch with ID ${batchId} not found`);
+    }
+
+    const batch = res.rows[0];
+    return {
+      batchId: batch.b_id,
+      batchCode: batch.batch_code,
+      batchName: batch.batch_name,
+      vendorId: batch.v_id,
+    };
+  } catch (error) {
+    console.error("Error retrieving batch:", error.message);
+    throw error;
+  }
+};
+
+const getAllBatchesByVendor = async (vendorId) => {
+  try {
+    const query = `SELECT * FROM batch WHERE v_id = $1`;
+    const res = await pool.query(query, [vendorId]);
+    return res.rows.map((batch) => ({
+      batchId: batch.b_id,
+      batchCode: batch.batch_code,
+      batchName: batch.batch_name,
+      vendorId: batch.v_id,
+    }));
+  } catch (error) {
+    console.error("Error retrieving vendor-specific batches:", error.message);
+    throw error;
+  }
+};
+
+const insertFeatureProductMapping = async (f_id, p_id) => {
+  try {
+    const query = `INSERT INTO feature_product_map (f_id, p_id) VALUES ($1, $2)`;
+    await pool.query(query, [f_id, p_id]);
+    console.log("Feature-Product mapping added:", f_id, p_id);
+  } catch (error) {
+    console.error("Error inserting feature-product mapping:", error.message);
+    throw error;
+  }
+};
+const getFeaturesByProductId = async (productId) => {
+  try {
+    const query = `
+      SELECT f.*
+      FROM feature f
+      JOIN feature_product_map fpm ON f.f_id = fpm.f_id
+      JOIN product p ON p.p_id = fpm.p_id
+      WHERE p.product_id = $1
+    `;
+    const res = await pool.query(query, [productId]);
+    return res.rows;
+  } catch (error) {
+    console.error("Error retrieving features by product ID:", error.message);
+    throw error;
+  }
+};
+//----------------------------------------Mapping Feature Product-------------------------------------------------//
+const getProductsWithFeaturesByVendor = async (vendorId) => {
+  try {
+    const query = `
+  SELECT 
+  p.product_id, 
+  p.product_name, 
+  f.feature_name
+  FROM 
+  product p
+  JOIN 
+  feature_product_map m ON p.p_id = m.p_id
+  JOIN 
+  feature f ON m.f_id = f.f_id
+  WHERE 
+  p.v_id = $1;
+  `;
+    const result = await pool.query(query, [vendorId]);
+    return result.rows.map((row) => ({
+      productId: row.product_id,
+      productName: row.product_name,
+      featureName: row.feature_name,
+    }));
+  } catch (error) {
+    console.error("Error retrieving products with features:", error.message);
+    throw error;
+  }
+};
+
+// Function to delete product and its related features
+const deleteProductAndFeaturesByVendor = async (productId, vendorId) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN"); // Start transaction
+
+    // Delete from feature_product_map
+    const deleteFeatureMapQuery = `
+      DELETE FROM feature_product_map
+      WHERE p_id = $1
+    `;
+    await client.query(deleteFeatureMapQuery, [productId]);
+
+    // Delete from product
+    const deleteProductQuery = `
+      DELETE FROM product
+      WHERE p_id = $1 AND v_id = $2
+    `;
+    await client.query(deleteProductQuery, [productId, vendorId]);
+
+    await client.query("COMMIT"); // Commit transaction
+    return { success: true };
+  } catch (error) {
+    await client.query("ROLLBACK"); // Rollback transaction on error
+    console.error("Error deleting product and features:", error.message);
+    throw error;
+  } finally {
+    client.release(); // Release client
+  }
+};
+//-----------------------entitlement and mapping-------------------------------------------//
+
+// ** Database Functions **
+
+// Function to insert a new entitlement
+const insertEntitlement = async (entitlementId, date, vendorId) => {
+  const query = `
+    INSERT INTO entitlement (entitlement_id, date_created, v_id)
+    VALUES ($1, $2, $3)
+    RETURNING *;
+  `;
+  const values = [entitlementId, date, vendorId];
+  const result = await pool.query(query, values);
+  return result.rows[0]; // Returns the newly inserted entitlement, including the e_id
+};
+
+const deleteEntitlement = async (entitlementId) => {
+  const client = await pool.connect(); // Start a client to use a transaction
+  try {
+    await client.query("BEGIN"); // Start a transaction
+    console.log("Deleting entitlement with ID:", entitlementId);
+    // Delete the entry from the product_ent_map table
+    const deleteProductEntMapQuery = `DELETE FROM product_ent_map WHERE e_id = $1`;
+    await client.query(deleteProductEntMapQuery, [entitlementId]);
+    // Now delete the entitlement from the entitlement table
+    const deleteEntitlementQuery = `DELETE FROM entitlement WHERE e_id = $1`;
+    await client.query(deleteEntitlementQuery, [entitlementId]);
+    await client.query("COMMIT"); // Commit the transaction
+    console.log("Entitlement deleted successfully:", entitlementId);
+  } catch (error) {
+    await client.query("ROLLBACK"); // Rollback in case of an error
+    console.error("Error deleting entitlement:", error.message);
+    throw error; // Rethrow for proper error handling
+  } finally {
+    client.release(); // Release the client
+  }
+};
+// Function to insert a product-entitlement mapping
+const insertProductEntitlementMapping = async (
+  entitlementId,
+  productId,
+  vendorId
+) => {
+  const query = `
+    INSERT INTO product_ent_map (e_id, p_id, v_id)
+    VALUES ($1, $2, $3);
+  `;
+  const values = [entitlementId, productId, vendorId];
+  await pool.query(query, values);
+};
+
+const getEntitlementsByVendor = async (vendorId) => {
+  try {
+    const query = `
+  SELECT 
+  e.e_id,
+  e.entitlement_id, 
+  p.product_name,
+  e.date_created
+  FROM 
+  entitlement e
+  JOIN 
+  product_ent_map pem ON e.e_id = pem.e_id
+  JOIN 
+  product p ON pem.p_id = p.p_id
+  WHERE 
+  e.v_id = $1
+  `;
+    const result = await pool.query(query, [vendorId]);
+    return result.rows.map((row) => ({
+      eId: row.e_id,
+      entitlementId: row.entitlement_id,
+      productName: row.product_name,
+      date: row.date_created, // Include date in the returned object
+    }));
+  } catch (error) {
+    console.error(
+      "Error retrieving entitlements with products:",
+      error.message
+    );
+    throw error;
+  }
+};
+
+// Function to insert data into the feat_prod_ent_map table
+const insertIntoFeatProdEntMap = async (data) => {
+  try {
+    const {
+      f_id,
+      p_id,
+      e_id,
+      v_id,
+      feature_enable,
+      Businesss_model,
+      start_date,
+      issued_count,
+      consumed_count,
+      available_count,
+      end_date,
+      no_of_days,
+    } = data;
+
+    const insertQuery = `
+      INSERT INTO feat_prod_ent_map (f_id, p_id, e_id, v_id, feature_enable, Businesss_model, start_date, issued_count, consumed_count, available_count, end_date, no_of_days)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING map_id;  -- Return the generated map_id
+    `;
+
+    const values = [
+      f_id,
+      p_id,
+      e_id,
+      v_id,
+      feature_enable,
+      Businesss_model,
+      start_date,
+      issued_count,
+      consumed_count,
+      available_count,
+      end_date,
+      no_of_days,
+    ];
+
+    const result = await pool.query(insertQuery, values);
+    return result.rows[0].map_id; // Return the map_id of the inserted row
+  } catch (error) {
+    console.error("Error inserting into feat_prod_ent_map:", error);
+    throw error; // Re-throw the error to be handled by the calling function
+  }
+};
+
+const processUsers = async (users, vendorId) => {
+  for (const user of users) {
+    const { username, batchCode } = user;
+    const nextUserId = await getNextUserId();
+    const newUser = await insertUser(nextUserId, username, vendorId);
+    const batch = await getBatchByCode(batchCode);
+    if (batch) {
+      await insertUserBatch(newUser.user_id, batch.b_id);
+    }
+  }
+};
+
+// Export all functions for use in other files
+module.exports = {
+  pool,
+  insertFeature,
+  deleteFeature,
+  getAllFeatureDetailsFromDb,
+  getFeaturesByVendor,
+  insertUserWithoutPassword,
+  insertProduct,
+  deleteProduct,
+  getAllProducts,
+  getUserByUserId,
+  insertUser,
+  insertUserBatch,
+  getProductsByVendor,
+  insertBatch,
+  getAllBatches,
+  getBatchById,
+  getAllBatchesByVendor,
+  getUserBatch,
+  insertFeatureProductMapping,
+  getFeaturesByProductId,
+  insertMapping,
+  getProductsWithFeaturesByVendor,
+  insertEntitlement,
+  insertProductEntitlementMapping,
+  getEntitlementsByVendor,
+  deleteProductAndFeaturesByVendor,
+  deleteEntitlement,
+  processUsers,
+};
+
+--------------------------------------------------------
+
+app
+
+
+const express = require("express");
+const {
+  pool,
+  insertUserBatch,
+  getAllProducts,
+} = require("./Database/Database"); // Ensure insertUserBatch is exported properly
+const cors = require("cors");
+const path = require("path");
+const bodyParser = require("body-parser");
+const morgan = require("morgan");
+const jwt = require("jsonwebtoken");
+const winston = require("winston");
+
+const multer = require("multer");
+const csv = require("csv-parser");
+const xml2js = require("xml2js");
+const fs = require("fs");
+const xlsx = require("xlsx");
+
+// Configure multer for file uploads
+const upload = multer({ dest: "uploads/" });
+
+const {
+  insertFeature,
+  deleteFeature,
+  getAllFeatureDetailsFromDb,
+  getFeaturesByVendor,
+  insertUserWithoutPassword,
+  insertProduct,
+  deleteProduct,
+  // getAllProductsFromDb,
+  getUserByUserId,
+  insertUser,
+  getProductsByVendor,
+  insertBatch,
+  getAllBatches,
+  getBatchById,
+  getAllBatchesByVendor,
+  insertFeatureProductMapping,
+  getFeaturesByProductId,
+  insertMapping,
+  getProductsWithFeaturesByVendor,
+  deleteEntitlement,
+  insertEntitlement,
+  insertProductEntitlementMapping,
+  getEntitlementsByVendor,
+  deleteProductAndFeaturesByVendor,
+  getUserBatch,
+  processUsers,
+} = require("./Database/Database");
+
+const app = express();
+
+// JWT Secret
+const JWT_SECRET = "your_jwt_secret"; // Replace with a secure secret
+
+// Logger setup
+const logger = winston.createLogger({
+  level: "info",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.File({ filename: "error.log", level: "error" }),
+    new winston.transports.File({ filename: "combined.log" }),
+  ],
+});
+
+if (process.env.NODE_ENV !== "production") {
+  logger.add(
+    new winston.transports.Console({
+      format: winston.format.simple(),
+    })
+  );
+}
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(bodyParser.json());
+app.use(
+  morgan("combined", {
+    stream: { write: (message) => logger.info(message.trim()) },
+  })
+);
+
+// Generate JWT token with vendorId
+const generateToken = (user) => {
+  return jwt.sign(
+    { userId: user.u_id, role: user.role, vendorId: user.v_id },
+    // Include vendorId in the token payload
+    JWT_SECRET,
+    { expiresIn: "1h" }
+  );
+};
+
+// Middleware for authentication
+const authorize = (roles) => (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).json({ message: "Access token required" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (!roles.includes(decoded.role)) {
+      return res.status(403).json({ message: "Access forbidden" });
+    }
+
+    req.user = decoded; // Set user data for access in next route
+    console.log("req.user in authorize:", req.user);
+    next();
+  } catch (error) {
+    res.status(401).json({ message: "Invalid token" });
+  }
+};
+
+// ** User Authentication **
+
+// Login endpoint
+app.post("/api/login", async (req, res) => {
+  const { userId, password } = req.body;
+  if (!userId || !password) {
+    return res
+      .status(400)
+      .json({ message: "User ID and password are required" });
+  }
+  try {
+    const user = await getUserByUserId(userId);
+    if (!user || user.password !== password) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+    const token = generateToken(user);
+
+    res.json({
+      token,
+      userId: user.u_id,
+      vendorId: user.v_id,
+      role: user.role,
+    });
+  } catch (error) {
+    logger.error(`Error during login: ${error.message}`, {
+      stack: error.stack,
+    });
+
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// Endpoint to add a new user without a password
+app.post("/api/add-user", async (req, res) => {
+  const { userId, username } = req.body;
+
+  if (!userId || !username) {
+    return res
+      .status(400)
+      .json({ message: "User ID and username are required" });
+  }
+
+  try {
+    await insertUserWithoutPassword(userId, username); // Ensure this function works as expected in Database.js
+    res.status(201).json({ message: "User added successfully" });
+  } catch (error) {
+    logger.error(`Error adding user: ${error.message}`, { stack: error.stack });
+    res.status(500).json({ message: "Server error. Please try again." });
+  }
+});
+
+// ** Feature Endpoints **
+
+// Get all features (Admin sees all, Vendor sees their own)
+// app.js
+
+app.get("/api/features", authorize(["admin", "vendor"]), async (req, res) => {
+  try {
+    let features;
+
+    if (req.user.role === "vendor") {
+      const vendorId = req.user.vendorId; // Or req.user.v_id - use the correct property from JWT
+      features = await getFeaturesByVendor(vendorId); // Correct: Use getFeaturesByVendor
+    } else {
+      // Admin
+      features = await getAllFeatureDetailsFromDb();
+    }
+
+    console.log("Features being returned from /api/features:", features); // Log the actual features
+    res.json({ features });
+  } catch (error) {
+    logger.error(`Error fetching features: ${error.message}`, {
+      stack: error.stack,
+    });
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Add a new feature
+app.post("/api/features", authorize(["admin", "vendor"]), async (req, res) => {
+  const { featureId, featureName } = req.body;
+  try {
+    // Fetch v_id of the logged-in user
+    const userQuery = `SELECT v_id FROM users WHERE u_id = $1`;
+    const userResult = await pool.query(userQuery, [req.user.userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const vendorId = userResult.rows[0].v_id;
+    if (!vendorId) {
+      return res.status(400).json({ message: "Vendor ID not set for user" });
+    }
+    // Call the function to insert the feature with the vendor ID
+    await insertFeature(featureId, featureName, vendorId);
+    res.status(201).json({ message: "Feature added successfully" });
+  } catch (error) {
+    logger.error(`Error adding feature: ${error.message}`, {
+      stack: error.stack,
+    });
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete a feature)
+// app.js
+app.delete("/api/features/:featureId", async (req, res) => {
+  try {
+    console.log("Feature Id to delete:", req.params.featureId);
+    await deleteFeature(req.params.featureId);
+    res.status(200).json({ message: "Feature deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting feature:", error.message);
+    res.status(400).json({ message: error.message }); // Send the error message to the client
+  }
+});
+// ** Product Endpoints **
+
+// Get all products from the database
+app.get("/api/products", authorize(["admin", "vendor"]), async (req, res) => {
+  try {
+    if (req.user.role === "vendor") {
+      const vendorId = req.user.vendorId; // From JWT
+      const products = await getProductsByVendor(vendorId);
+      console.log("Products", products);
+      res.json({ products });
+    } else {
+      const { vendorId } = req.query; // Get vendorId from query parameter
+      if (!vendorId) {
+        return res
+          .status(400)
+          .json({ message: "Vendor ID is required for admin." });
+      }
+      const products = await getProductsByVendor(vendorId); //Get products for the specified vendor
+
+      res.json({ products });
+    }
+  } catch (error) {
+    logger.error(`Error fetching products: ${error.message}`, {
+      stack: error.stack,
+    });
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Add a new product to the database
+
+app.post("/api/products", authorize(["admin", "vendor"]), async (req, res) => {
+  const { productId, productName, features } = req.body;
+
+  try {
+    const vendorId = req.user.vendorId; // Use vendorId from decoded JWT
+
+    if (!vendorId) {
+      return res.status(400).json({ message: "Vendor ID is required" });
+    }
+
+    const newProduct = await insertProduct(productId, productName, vendorId);
+
+    if (features && features.length > 0) {
+      for (let featureId of features) {
+        await insertMapping(featureId, newProduct.p_id, vendorId);
+      }
+    }
+
+    res.status(201).json({
+      message: "Product and associated features added successfully",
+
+      newProduct,
+    });
+  } catch (error) {
+    logger.error(`Error adding product: ${error.message}`, {
+      stack: error.stack,
+    });
+
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete a product from the database
+// Delete a product from the database
+app.delete(
+  "/api/products/:productId",
+  authorize(["admin", "vendor"]),
+  async (req, res) => {
+    try {
+      const productIdToDelete = parseInt(req.params.productId, 10); // Parse to integer
+
+      // Check if the product is used in any entitlements
+      const entitlementUsage = await pool.query(
+        "SELECT COUNT(*) AS entitlement_count FROM product_ent_map WHERE p_id = $1", // Parameterize
+        [productIdToDelete]
+      );
+
+      const entitlementCount = parseInt(
+        entitlementUsage.rows[0].entitlement_count,
+        10
+      );
+
+      if (entitlementCount > 0) {
+        return res.status(400).json({
+          message:
+            "Cannot delete product. It is used in one or more entitlements.",
+        });
+      }
+
+      // Proceed with deletion if not used in any entitlement
+      await deleteProduct(productIdToDelete); // Assuming deleteProduct takes p_id
+      res.status(200).json({ message: "Product deleted successfully." });
+    } catch (error) {
+      console.error("Error deleting product:", error.message); // Log full error for debugging
+      res.status(500).json({
+        message:
+          "Cannot delete product. It is used in one or more entitlements.",
+        details: error.message,
+      }); // Send error details to the client
+    }
+  }
+);
+app.get("/api/next-user-id", async (req, res) => {
+  try {
+    const query = `
+      SELECT COALESCE(MAX(user_id), 9999) + 1 AS next_user_id
+      FROM users;
+    `;
+    const result = await pool.query(query);
+    const nextUserId = result.rows[0].next_user_id;
+    res.status(200).json({ nextUserId });
+  } catch (error) {
+    console.error("Error fetching next user ID:", error.message);
+    res.status(500).json({ message: "Failed to fetch next user ID." });
+  }
+});
+
+// Add user to batch
+// app.post(
+//   "/api/add-user-batch",
+//   authorize(["admin", "vendor"]),
+//   async (req, res) => {
+//     // Ensure authentication
+//     try {
+//       const { userId, username, batchCode } = req.body;
+//       let vendorId;
+
+//       if (req.user.role === "vendor") {
+//         vendorId = req.user.vendorId; // Correct: use vendorId from JWT
+//       } else if (req.user.role === "admin") {
+//         vendorId = req.body.vendorId; // Admin provides vendorId
+//       }
+
+//       if (!vendorId || !userId || !username || !batchCode) {
+//         //Correct: Validate *all* required fields
+
+//         return res.status(400).json({
+//           message:
+//             "All fields (userId, username, batchCode, and vendorId) are required.",
+//         });
+//       }
+
+//       // 1. Insert the user (use vendorId):
+//       const newUserId = await insertUser(userId, username, "", vendorId); // Pass vendorId to insertUser
+
+//       // 2. Get the batch by code:
+//       const batch = await getBatchByCode(batchCode);
+//       if (!batch) {
+//         return res.status(404).json({ message: "Batch not found." }); // Correct status code
+//       }
+
+//       // 3. Add user to the batch:
+//       await insertUserBatch(userId, batch.b_id);
+
+//       // 4. Send a *single* success response:
+//       res.status(201).json({
+//         message: "User added to batch successfully!",
+//         userId: newUserId,
+//         batchId: batch.b_id,
+//       }); // Correct: Single responses
+//     } catch (error) {
+//       console.error("Error adding user to batch:", error); // Log the full error object for more details
+//       if (
+//         error.message === "User with this ID already exists for this vendor."
+//       ) {
+//         // Catch the specific error
+//         return res.status(400).json({ message: error.message }); // Or a more user-friendly message
+//       }
+//       if (error.code === "23505") {
+//         if (error.detail.includes("user_id")) {
+//           return res
+//             .status(400)
+//             .json({ message: "User already exists in batch" });
+//         }
+//       }
+
+//       res.status(500).json({
+//         message: "Failed to add user to batch.",
+//         details: error.message,
+//       }); // More informative response
+//     }
+//   }
+// );
+
+// Add user to batch
+app.post(
+  "/api/add-user-batch",
+  authorize(["admin", "vendor"]),
+  async (req, res) => {
+    try {
+      const { userId, username, batchCode, role } = req.body;
+      let vendorId;
+
+      if (req.user.role === "vendor") {
+        vendorId = req.user.vendorId; // Correct: use vendorId from JWT
+      } else if (req.user.role === "admin") {
+        vendorId = req.body.vendorId; // Admin provides vendorId
+      }
+
+      if (!vendorId || !userId || !username || !batchCode) {
+        return res.status(400).json({
+          message:
+            "All fields (userId, username, batchCode, and vendorId) are required.",
+        });
+      }
+
+      // Insert the user into the users table
+      const newUser = await insertUser(userId, username, vendorId, role);
+
+      // Fetch the batch ID using the batch code
+      const batch = await getBatchByCode(batchCode);
+      if (!batch) {
+        return res.status(400).json({ message: "Invalid batch code" });
+      }
+
+      // Insert into user_batch table
+      await insertUserBatch(newUser.user_id, batch.b_id);
+
+      res
+        .status(200)
+        .json({ message: "User batch added successfully!", user: newUser });
+    } catch (error) {
+      console.error("Error adding user to batch:", error);
+      res
+        .status(500)
+        .json({ message: "Internal Server Error", details: error.message });
+    }
+  }
+);
+
+// Get user batch details
+app.get("/api/user-batch", authorize(["admin", "vendor"]), async (req, res) => {
+  try {
+    const vendorId = req.user.vendorId;
+
+    if (!vendorId) {
+      return res.status(400).json({ message: "Vendor ID is required" });
+    }
+
+    const userBatchDetails = await getUserBatch(vendorId);
+    res.status(200).json({ userBatch: userBatchDetails });
+  } catch (error) {
+    console.error("Error fetching user batch details:", error.message);
+    res
+      .status(500)
+      .json({ message: "Internal Server Error", details: error.message });
+  }
+});
+
+// Helper function to get batch by code
+const getBatchByCode = async (batchCode) => {
+  try {
+    const query = `SELECT * FROM batch WHERE batch_code = $1`;
+    const res = await pool.query(query, [batchCode]);
+    return res.rows[0];
+  } catch (error) {
+    F;
+    console.error("Error retrieving batch by code:", error.message);
+    throw error;
+  }
+};
+
+// Endpoint to add a new batch
+app.post("/api/batches", authorize(["admin", "vendor"]), async (req, res) => {
+  try {
+    const { batchCode, batchName } = req.body;
+
+    // Fetch v_id of the logged-in user
+    const userQuery = `SELECT v_id FROM users WHERE u_id = $1`;
+    const userResult = await pool.query(userQuery, [req.user.userId]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const vendorId = userResult.rows[0].v_id;
+
+    if (!vendorId) {
+      return res.status(400).json({ message: "Vendor ID not set for user" });
+    }
+
+    // Insert batch
+    await insertBatch(batchCode, batchName, vendorId);
+
+    res.status(201).json({ message: "Batch added successfully!" });
+  } catch (error) {
+    console.error("Error adding batch:", error);
+    res
+      .status(500)
+      .json({ message: "Internal Server Error", details: error.message });
+  }
+});
+
+// Endpoint to fetch all batches
+app.get("/api/batches", authorize(["admin", "vendor"]), async (req, res) => {
+  try {
+    let batches;
+    if (req.user.role === "vendor") {
+      const vendorId = req.user.vendorId; //Directly use vendorId
+      batches = await getAllBatchesByVendor(vendorId);
+    } else {
+      //Admin Case
+      batches = await getAllBatches();
+    }
+    console.log("Batches retrieved:", batches); //Check after retrieval
+    res.status(200).json({ batches });
+  } catch (error) {
+    logger.error(`Error fetching batches: ${error.message}`, {
+      stack: error.stack,
+    });
+    res.status(500).json({ message: "Failed to fetch batches." });
+  }
+});
+
+// Endpoint to retrieve a batch by ID
+app.get(
+  "/api/batches/:batchId",
+  authorize(["admin", "vendor"]),
+  async (req, res) => {
+    const { batchId } = req.params;
+
+    try {
+      const batch = await getBatchById(batchId);
+
+      if (!batch) {
+        return res.status(404).json({ message: "Batch not found" });
+      }
+
+      // Restrict access to the vendor's own batches
+      if (req.user.role === "vendor" && batch.vendorId !== req.user.v_id) {
+        return res.status(403).json({ message: "Access forbidden" });
+      }
+
+      res.status(200).json({ batch });
+    } catch (error) {
+      logger.error(`Error retrieving batch: ${error.message}`, {
+        stack: error.stack,
+      });
+      res
+        .status(500)
+        .json({ message: "Failed to retrieve batch. Please try again." });
+    }
+  }
+);
+
+//-------------------------------------Get Product Feature Mapping-------------------------------
+app.get(
+  "/api/products-with-features",
+  authorize(["admin", "vendor"]),
+  async (req, res) => {
+    try {
+      let products;
+
+      if (req.user.role === "vendor") {
+        const vendorId = req.user.vendorId; // Extract vendorId from JWT payload
+        console.log("Fetching products with features for vendor ID:", vendorId);
+        products = await getProductsWithFeaturesByVendor(vendorId);
+      } else {
+        // Implement getAllProductsWithFeatures() for admin if required
+        console.log("Fetching all products with features for admin");
+        products = await getAllProductsWithFeatures();
+      }
+
+      // Debug fetched products
+      console.log("Products fetched successfully:", products);
+      res.json({ products });
+    } catch (error) {
+      logger.error(`Error fetching products with features: ${error.message}`, {
+        stack: error.stack,
+      });
+      res
+        .status(500)
+        .json({ message: "Failed to fetch products with features" });
+    }
+  }
+);
+// API endpoint to delete product and related features
+app.delete(
+  "/api/products/:productId",
+  authorize(["vendor"]),
+  async (req, res) => {
+    const { productId } = req.params;
+    const vendorId = req.user.u_id;
+
+    try {
+      const result = await deleteProductAndFeaturesByVendor(
+        productId,
+        vendorId
+      );
+      res.json({
+        message: "Product and related features deleted successfully.",
+        result,
+      });
+    } catch (error) {
+      logger.error(`Error deleting product and features: ${error.message}`, {
+        stack: error.stack,
+      });
+      res
+        .status(500)
+        .json({ message: "Failed to delete product and features." });
+    }
+  }
+);
+
+//-------------------------------------Get Product Ent Mapping-------------------------------
+
+// Get all entitlements
+
+// Add a new entitlement and product mapping to the database
+app.post(
+  "/api/entitlements",
+  authorize(["admin", "vendor"]),
+  async (req, res) => {
+    try {
+      const { entitlementId, dates, selectedProducts } = req.body;
+      const vendorId = req.user.vendorId; // From JWT
+      console.log("Received data:", req.body); // Log incoming request body
+
+      // Validate and format the dates
+      const formattedDates = Array.isArray(dates) ? dates : [dates];
+      const formattedTimestamps = formattedDates.map((date) => {
+        const parsedDate = new Date(date);
+        if (isNaN(parsedDate)) {
+          throw new Error(`Invalid date value: ${date}`);
+        }
+        return parsedDate.toISOString(); // Convert to ISO string
+      });
+
+      // Insert the new entitlement
+      const newEntitlement = await insertEntitlement(
+        entitlementId,
+        formattedTimestamps,
+        vendorId
+      );
+      console.log("New Entitlement:", newEntitlement);
+
+      // Validate selectedProducts
+      if (!selectedProducts || selectedProducts.length === 0) {
+        console.warn("No selected products provided for mapping.");
+        return res
+          .status(400)
+          .json({ message: "No products selected for mapping." });
+      }
+
+      // Insert mappings to product_ent_map table
+      const failedMappings = [];
+      for (let productId of selectedProducts) {
+        try {
+          console.log("Mapping entitlement to product:", {
+            entitlementId: newEntitlement.e_id,
+            productId,
+            vendorId: req.user.u_id,
+          });
+
+          // Insert mapping into product_ent_map
+          await insertProductEntitlementMapping(
+            newEntitlement.e_id,
+            productId,
+            req.user.vendorId
+          );
+        } catch (mappingError) {
+          console.error(
+            `Error adding product mapping for product ID ${productId}:`,
+            mappingError.message
+          );
+          failedMappings.push(productId); // Keep track of failed mappings
+        }
+      }
+
+      // If any mappings failed, return a partial success response
+      if (failedMappings.length > 0) {
+        console.warn("Failed mappings for product IDs:", failedMappings);
+        return res.status(500).json({
+          message: "Entitlement added, but some product mappings failed.",
+          failedMappings,
+        });
+      }
+
+      // Return success response
+      res.status(201).json({
+        message: "Entitlement and associated products added successfully.",
+        newEntitlement,
+      });
+    } catch (error) {
+      console.error("Error adding entitlement:", error); // Log the full error
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+app.get(
+  "/api/entitlements-with-products",
+  authorize(["vendor"]), // Assuming `authorize` middleware checks if the user is a vendor
+  async (req, res) => {
+    try {
+      const vendorId = req.user.vendorId;
+      const entitlements = await getEntitlementsByVendor(vendorId);
+      console.log("Entitlements fetched:", entitlements);
+
+      res.json({ entitlements });
+    } catch (error) {
+      logger.error(
+        `Error fetching entitlements with products: ${error.message}`,
+        {
+          stack: error.stack,
+        }
+      );
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// Delete an entitlement from the database
+app.delete(
+  "/api/entitlements/:entitlementId",
+  authorize(["admin", "vendor"]),
+  async (req, res) => {
+    try {
+      const entitlementIdToDelete = parseInt(req.params.entitlementId, 10);
+
+      if (isNaN(entitlementIdToDelete)) {
+        return res.status(400).json({ message: "Invalid entitlement ID" });
+      }
+
+      // Call the database function to delete entitlement
+      await deleteEntitlement(entitlementIdToDelete);
+
+      res.status(200).json({ message: "Entitlement deleted successfully." });
+    } catch (error) {
+      console.error("Error deleting entitlement:", error.message);
+      res.status(500).json({
+        message: "Failed to delete entitlement.",
+        details: error.message,
+      });
+    }
+  }
+);
+
+// Endpoint to handle file upload
+app.post(
+  "/api/upload-users",
+  authorize(["admin", "vendor"]),
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      console.log("File uploaded:", file.path); // Debug logging
+
+      const users = [];
+
+      if (file.mimetype === "text/csv") {
+        // Parse CSV file
+        fs.createReadStream(file.path)
+          .pipe(csv())
+          .on("data", (row) => {
+            users.push(row);
+          })
+          .on("end", async () => {
+            await processUsers(users, req.user.vendorId);
+            res.status(200).json({ message: "Users added successfully!" });
+          });
+      } else if (
+        file.mimetype === "application/xml" ||
+        file.mimetype === "text/xml"
+      ) {
+        // Parse XML file
+        const xmlData = fs.readFileSync(file.path, "utf8");
+        const parser = new xml2js.Parser();
+        parser.parseString(xmlData, async (err, result) => {
+          if (err) {
+            return res.status(400).json({ message: "Error parsing XML file" });
+          }
+          const users = result.users.user.map((user) => ({
+            username: user.username[0],
+            batchCode: user.batchCode[0],
+          }));
+          await processUsers(users, req.user.vendorId);
+          res.status(200).json({ message: "Users added successfully!" });
+        });
+      } else {
+        return res.status(400).json({ message: "Unsupported file format" });
+      }
+    } catch (error) {
+      console.error("Error uploading users:", error);
+      res
+        .status(500)
+        .json({ message: "Internal Server Error", details: error.message });
+    } finally {
+      // Clean up uploaded file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    }
+  }
+);
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, "../Frontend")));
+
+// Handle all other requests by sending the React app
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../Frontend", "index.html"));
+});
+
+// 404 route for undefined endpoints
+app.use((req, res) => {
+  logger.warn("Attempted to access undefined endpoint");
+  res.status(404).send("Endpoint not found");
+});
+
+// Use environment variable for port or default to 5001
+const port = process.env.PORT || 5001;
+
+app.listen(port, () => {
+  logger.info(`Server running on port ${port}`);
+});
+
+
+
+--------------------------------------------------------
+
+adduser
+
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import {
+  TextField,
+  Button,
+  Container,
+  Typography,
+  Box,
+  Alert,
+  Grid,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
+} from "@mui/material";
+import { toast } from "react-toastify";
+
+const AddUserBatchForm = () => {
+  const [userId, setUserId] = useState("");
+  const [username, setUsername] = useState("");
+  const [batchCode, setBatchCode] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [batchOptions, setBatchOptions] = useState([]);
+  const [userBatch, setUserBatch] = useState([]); // Initialize as an empty array
+  const [file, setFile] = useState(null);
+  const token = localStorage.getItem("token");
+
+  useEffect(() => {
+    const fetchNextUserId = async () => {
+      try {
+        const response = await axios.get(
+          "http://localhost:5001/api/next-user-id",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        setUserId(response.data.nextUserId); // Set the next available user ID
+      } catch (error) {
+        setError("Failed to fetch the next user ID.");
+      }
+    };
+
+    const fetchBatchOptions = async () => {
+      try {
+        const response = await axios.get("http://localhost:5001/api/batches", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setBatchOptions(response.data.batches || []);
+      } catch (error) {
+        console.error("Error fetching batch options:", error.message);
+        setError("Failed to fetch batch options.");
+      }
+    };
+
+    const fetchUserBatch = async () => {
+      try {
+        const response = await axios.get(
+          "http://localhost:5001/api/user-batch",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setUserBatch(response.data.userBatch || []);
+      } catch (error) {
+        console.error("Error fetching user batch details:", error.message);
+        setError("Failed to fetch user batch details.");
+      }
+    };
+
+    fetchNextUserId();
+    fetchBatchOptions();
+    fetchUserBatch();
+  }, [token]);
+
+  const handleAddUserBatch = async () => {
+    try {
+      const response = await axios.post(
+        "http://localhost:5001/api/add-user-batch",
+        { userId, username, batchCode },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.status === 200) {
+        toast.success("User batch added successfully!");
+        setUserId(response.data.user.user_id); // Set the user_id from the response
+        // Refresh user batch details
+        const updatedUserBatch = await axios.get(
+          "http://localhost:5001/api/user-batch",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setUserBatch(updatedUserBatch.data.userBatch || []);
+      }
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message || "Error adding user to batch.";
+      console.error("Full error object:", error);
+      console.error("Add User Batch Error:", errorMessage);
+      toast.error(errorMessage);
+    }
+  };
+
+  const handleFileUpload = async () => {
+    if (!file) {
+      toast.error("Please upload a file.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await axios.post(
+        "http://localhost:5001/api/upload-users",
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (response.status === 200) {
+        toast.success("Users added successfully!");
+        // Refresh user batch details
+        const updatedUserBatch = await axios.get(
+          "http://localhost:5001/api/user-batch",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setUserBatch(updatedUserBatch.data.userBatch || []);
+      }
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message || "Error uploading users.";
+      console.error("Full error object:", error);
+      console.error("Upload Users Error:", errorMessage);
+      toast.error(errorMessage);
+    }
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    handleAddUserBatch();
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: -80,
+        backgroundColor: "rgba(10, 25, 50, 0.9)",
+        backdropFilter: "blur(8px)",
+        paddingTop: 50,
+        paddingBottom: 50,
+      }}
+    >
+      <Container
+        maxWidth="sm"
+        sx={{
+          padding: "2rem",
+          borderRadius: "8px",
+          boxShadow: "0 4px 10px rgba(0, 0, 0, 0.1)",
+          mt: 4,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "50vh",
+          marginTop: "12vh",
+          backgroundColor: "rgba(10, 25, 50, 0.9)",
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <Typography
+          variant="h4"
+          sx={{
+            mb: 2,
+            fontWeight: "bold",
+            textAlign: "center",
+            color: "white",
+          }}
+        >
+          Add User
+        </Typography>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+        {message && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            {message}
+          </Alert>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="User ID"
+                value={userId}
+                InputProps={{
+                  readOnly: true,
+                }}
+                variant="outlined"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                variant="outlined"
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <FormControl fullWidth variant="outlined" required>
+                <InputLabel>Batch Code</InputLabel>
+                <Select
+                  value={batchCode}
+                  onChange={(e) => setBatchCode(e.target.value)}
+                  label="Batch Code"
+                >
+                  {batchOptions.length > 0 ? (
+                    batchOptions.map((batch) => (
+                      <MenuItem key={batch.batchCode} value={batch.batchCode}>
+                        {batch.batchCode} - {batch.batchName}
+                      </MenuItem>
+                    ))
+                  ) : (
+                    <MenuItem disabled>No batch codes available</MenuItem>
+                  )}
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              mt: 3,
+            }}
+          >
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              sx={{
+                padding: "0.75rem 2rem",
+                fontWeight: "bold",
+              }}
+            >
+              Add User
+            </Button>
+          </Box>
+        </form>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            mt: 3,
+          }}
+        >
+          <input
+            type="file"
+            accept=".csv, .xml, .xlsx"
+            onChange={(e) => setFile(e.target.files[0])}
+          />
+          <Button
+            variant="contained"
+            color="primary"
+            sx={{
+              padding: "0.75rem 2rem",
+              fontWeight: "bold",
+              ml: 2,
+            }}
+            onClick={handleFileUpload}
+          >
+            Upload File
+          </Button>
+        </Box>
+      </Container>
+
+      <div style={{ padding: "20px" }}>
+        <h2 style={{ color: "white" }}>All User Batches</h2>
+        <table style={tableStyle}>
+          <thead>
+            <tr>
+              <th style={tableHeaderStyle}>User Id</th>
+              <th style={tableHeaderStyle}>User Name</th>
+              <th style={tableHeaderStyle}>Batch Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            {userBatch.length > 0 ? (
+              userBatch.map((user) => (
+                <tr key={user.u_id}>
+                  <td style={tableCellStyle}>{user.user_id}</td>
+                  <td style={tableCellStyle}>{user.username}</td>
+                  <td style={tableCellStyle}>
+                    {user.batch_code} - {user.batch_name}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="3" style={tableCellStyle}>
+                  No users available
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// Reuse the styles from your original code here...
+const tableStyle = {
+  width: "100%",
+  borderCollapse: "collapse",
+  marginTop: "20px",
+};
+
+const tableHeaderStyle = {
+  padding: "10px",
+  border: "1px solid #ccc",
+  backgroundColor: "#007bff",
+  color: "#fff",
+  textAlign: "left",
+};
+
+const tableCellStyle = {
+  padding: "10px",
+  border: "1px solid #ccc",
+  color: "white",
+};
+
+export default AddUserBatchForm;

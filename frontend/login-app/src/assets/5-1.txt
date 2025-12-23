@@ -1,0 +1,1393 @@
+Database 
+
+const { Pool } = require("pg");
+
+// Database configuration
+const config = {
+  user: "postgres", // Database username
+  host: "localhost", // Database host
+  database: "licensesolution", // Database name
+  password: "admin", // Database password
+  port: 5432, // Database port (make sure this is correct)
+};
+
+// Initialize the Pool for better performance
+const pool = new Pool(config);
+
+// Test the connection
+pool
+  .connect()
+  .then((client) => {
+    console.log("Database connected successfully");
+    client.release();
+  })
+  .catch((err) => console.error("Error connecting to the database:", err));
+
+// Function to insert a new user without a password
+const insertUserWithoutPassword = async (userId, username) => {
+  try {
+    const role = "end-user"; // Default role
+    console.log(
+      `Inserting user with ID: ${userId}, Username: ${username}, Role: ${role}`
+    );
+    const query = `INSERT INTO users (user_id, username, role) VALUES ($1, $2, $3)`;
+    await pool.query(query, [userId, username, role]);
+    console.log("User inserted:", userId, username, role);
+  } catch (error) {
+    console.error("Error inserting user:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert a new feature
+const insertFeature = async (featureId, featureName, vendorId) => {
+  try {
+    // Check if the feature already exists to prevent duplicates
+    const existingFeature = await pool.query(
+      "SELECT * FROM feature WHERE feature_id = $1",
+      [featureId]
+    );
+    if (existingFeature.rows.length > 0) {
+      throw new Error("Feature with this ID already exists.");
+    }
+
+    // Insert the new feature
+    const insertQuery = `INSERT INTO feature (feature_id, feature_name, v_id) VALUES ($1, $2, $3)`;
+    await pool.query(insertQuery, [featureId, featureName, vendorId]);
+    console.log("Feature inserted:", featureId, featureName, vendorId);
+  } catch (error) {
+    console.error("Error inserting feature:", error.message);
+    throw error; // Rethrow the error so the calling function can handle it
+  }
+};
+
+// Function to delete a feature
+const deleteFeature = async (featureId) => {
+  try {
+    // Check if the feature exists before attempting to delete it
+    const feature = await pool.query(
+      "SELECT * FROM feature WHERE feature_id = $1",
+      [featureId]
+    );
+    if (feature.rows.length === 0) {
+      throw new Error("Feature not found.");
+    }
+
+    // Delete the feature
+    const deleteQuery = `DELETE FROM feature WHERE feature_id = $1`;
+    await pool.query(deleteQuery, [featureId]);
+    console.log("Feature deleted:", featureId);
+  } catch (error) {
+    console.error("Error deleting feature:", error.message);
+    throw error; // Rethrow the error so the calling function can handle it
+  }
+};
+
+// Function to get all feature details from the database
+const getAllFeatureDetailsFromDb = async () => {
+  try {
+    const featureRes = await pool.query(
+      "SELECT f_id, feature_id, feature_name, v_id FROM feature"
+    );
+    return featureRes.rows.map((feature) => ({
+      f_id: feature.f_id,
+      featureId: feature.feature_id,
+      featureName: feature.feature_name,
+      vendorId: feature.v_id,
+    }));
+  } catch (error) {
+    console.error("Error retrieving features:", error.message);
+    throw error;
+  }
+};
+
+// Function to get features by vendor
+const getFeaturesByVendor = async (vendorId) => {
+  try {
+    const query =
+      "SELECT f_id, feature_id, feature_name FROM feature WHERE v_id = $1";
+    const res = await pool.query(query, [vendorId]);
+    return res.rows.map((feature) => ({
+      f_id: feature.f_id,
+      featureId: feature.feature_id,
+      featureName: feature.feature_name,
+    }));
+  } catch (error) {
+    console.error("Error retrieving vendor features:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert a user (with role validation)
+const insertUser = async (userId, username, password, role = "end-user") => {
+  try {
+    const query = `INSERT INTO users (user_id, username, password, role) VALUES ($1, $2, $3, $4)`;
+    await pool.query(query, [userId, username, password, role]);
+    console.log("User inserted:", userId, username, role);
+  } catch (error) {
+    console.error("Error inserting user:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert user into user_batch table
+const insertUserBatch = async (userId, batchId) => {
+  try {
+    const query = `INSERT INTO user_batch_map (user_id, b_id) VALUES ($1, $2)`;
+    await pool.query(query, [userId, batchId]);
+    console.log("User added to batch:", userId, batchId);
+  } catch (error) {
+    console.error("Error inserting into user_batch_map:", error.message);
+    throw error;
+  }
+};
+
+const getUserBatch = async (userId) => {
+  try {
+    const query = `SELECT * FROM user_batch_map WHERE user_id = $1`;
+    const res = await pool.query(query, [userId]);
+    return res.rows;
+  } catch (error) {
+    console.error("Error retrieving user batch:", error.message);
+    throw error;
+  }
+};
+
+// Function to get user by user ID
+const getUserByUserId = async (userId) => {
+  try {
+    const query = "SELECT * FROM users WHERE user_id = $1";
+    const res = await pool.query(query, [userId]);
+    return res.rows[0];
+  } catch (error) {
+    console.error("Error retrieving user:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert a new product into the "Product" table
+// Function to insert a new product
+const insertProduct = async (productId, productName, vendorId) => {
+  const query = `
+    INSERT INTO product (product_id, product_name, v_id)
+    VALUES ($1, $2, $3)
+    RETURNING *;
+  `;
+  const values = [productId, productName, vendorId];
+  const result = await pool.query(query, values);
+  return result.rows[0]; // Returns the newly inserted product, including the p_id
+};
+
+const insertMapping = async (featureId, productId, vendorId) => {
+  const query = `
+    INSERT INTO feature_product_map (f_id, p_id, v_id)
+    VALUES ($1, $2, $3);
+  `;
+  const values = [featureId, productId, vendorId];
+  await pool.query(query, values);
+};
+
+// Function to delete a product from the "Product" table
+const deleteProduct = async (productId) => {
+  try {
+    const deleteQuery = `DELETE FROM product WHERE product_id = $1`;
+    await pool.query(deleteQuery, [productId]);
+    console.log("Product deleted:", productId);
+  } catch (error) {
+    console.error("Error deleting product:", error.message);
+    throw error;
+  }
+};
+
+// Function to retrieve all products from the "Product" table
+const getAllProducts = async () => {
+  try {
+    const productRes = await pool.query("SELECT * FROM product");
+    return productRes.rows.map((product) => ({
+      p_id: product.p_id,
+      productId: product.product_id,
+      productName: product.product_name,
+      vendorId: product.v_id,
+    }));
+  } catch (error) {
+    console.error("Error retrieving products:", error.message);
+    throw error;
+  }
+};
+
+// Function to retrieve products by vendor
+const getProductsByVendor = async (vendorId) => {
+  try {
+    const query = "SELECT * FROM product WHERE v_id = $1";
+    const res = await pool.query(query, [vendorId]);
+    return res.rows.map((product) => ({
+      p_id: product.p_id,
+      productId: product.product_id,
+      productName: product.product_name,
+    }));
+  } catch (error) {
+    console.error("Error retrieving vendor products:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert a new batch with v_id
+const insertBatch = async (batchCode, vendorId, batchName = null) => {
+  try {
+    // Validate the batchCode to ensure it is within the allowed range
+    if (batchCode < 1000000 || batchCode > 9999999) {
+      throw new Error("Batch Code must be between 1,000,000 and 9,999,999");
+    }
+
+    // Validate vendorId and ensure it's provided
+    if (!vendorId) {
+      throw new Error("Vendor ID is required");
+    }
+
+    // Insert batch with batch_code, batch_name, and v_id
+    const query = `
+      INSERT INTO batch (batch_code, batch_name, v_id) 
+      VALUES ($1, $2, $3)
+    `;
+
+    await pool.query(query, [batchCode, batchName, vendorId]);
+    console.log(
+      "Batch inserted with code:",
+      batchCode,
+      "name:",
+      batchName,
+      "vendor ID:",
+      vendorId
+    );
+  } catch (error) {
+    console.error("Error inserting batch:", error.message);
+    throw error;
+  }
+};
+
+// Function to retrieve all batches
+const getAllBatches = async () => {
+  try {
+    const res = await pool.query("SELECT * FROM batch");
+    return res.rows.map((batch) => ({
+      batchId: batch.b_id,
+      batchCode: batch.batch_code,
+      batchName: batch.batch_name,
+      vendorId: batch.v_id,
+    }));
+  } catch (error) {
+    console.error("Error retrieving batches:", error.message);
+    throw error;
+  }
+};
+
+// Function to retrieve a batch by ID
+const getBatchById = async (batchId) => {
+  try {
+    const query = `SELECT * FROM batch WHERE b_id = $1`;
+    const res = await pool.query(query, [batchId]);
+
+    if (!res.rows.length) {
+      throw new Error(`Batch with ID ${batchId} not found`);
+    }
+
+    const batch = res.rows[0];
+    return {
+      batchId: batch.b_id,
+      batchCode: batch.batch_code,
+      batchName: batch.batch_name,
+      vendorId: batch.v_id,
+    };
+  } catch (error) {
+    console.error("Error retrieving batch:", error.message);
+    throw error;
+  }
+};
+const getAllBatchesByVendor = async (vendorId) => {
+  try {
+    console.log(`Fetching batches for vendor ID: ${vendorId}`);
+    const query = `SELECT * FROM batch WHERE v_id = $1`;
+    const res = await pool.query(query, [vendorId]);
+    console.log("Vendor-specific batches fetched:", res.rows);
+    return res.rows.map((batch) => ({
+      batchId: batch.b_id,
+      batchCode: batch.batch_code,
+      batchName: batch.batch_name,
+      vendorId: batch.v_id,
+    }));
+  } catch (error) {
+    console.error("Error retrieving vendor-specific batches:", error.message);
+    throw error;
+  }
+};
+
+// Function to insert a new entitlement
+const insertEntitlement = async (entitlementId, product) => {
+  try {
+    const query = ` INSERT INTO Entitlement (Entitlement_Id, Product) VALUES ($1, $2) `;
+    await pool.query(query, [entitlementId, product]);
+    console.log("Entitlement inserted:", entitlementId, product);
+  } catch (error) {
+    console.error("Error inserting entitlement:", error.message);
+    throw error;
+  }
+};
+// Function to delete an entitlement
+const deleteEntitlement = async (entitlementId) => {
+  try {
+    const deleteQuery = `DELETE FROM Entitlement WHERE Entitlement_Id = $1`;
+    await pool.query(deleteQuery, [entitlementId]);
+    console.log("Entitlement deleted:", entitlementId);
+  } catch (error) {
+    console.error("Error deleting entitlement:", error.message);
+    throw error;
+  }
+};
+// Function to retrieve all entitlements from the database
+const getAllEntitlements = async () => {
+  try {
+    const entitlementRes = await pool.query("SELECT * FROM Entitlement");
+    return entitlementRes.rows.map((entitlement) => ({
+      entitlementId: entitlement.entitlement_id,
+      dateCreated: entitlement.date_created,
+      product: entitlement.product,
+    }));
+  } catch (error) {
+    console.error("Error retrieving entitlements:", error.message);
+    throw error;
+  }
+};
+
+const insertFeatureProductMapping = async (f_id, p_id) => {
+  try {
+    const query = `INSERT INTO feature_product_map (f_id, p_id) VALUES ($1, $2)`;
+    await pool.query(query, [f_id, p_id]);
+    console.log("Feature-Product mapping added:", f_id, p_id);
+  } catch (error) {
+    console.error("Error inserting feature-product mapping:", error.message);
+    throw error;
+  }
+};
+const getFeaturesByProductId = async (productId) => {
+  try {
+    const query = `
+      SELECT f.*
+      FROM feature f
+      JOIN feature_product_map fpm ON f.f_id = fpm.f_id
+      JOIN product p ON p.p_id = fpm.p_id
+      WHERE p.product_id = $1
+    `;
+    const res = await pool.query(query, [productId]);
+    return res.rows;
+  } catch (error) {
+    console.error("Error retrieving features by product ID:", error.message);
+    throw error;
+  }
+};
+
+const getProductsWithFeaturesByVendor = async (vendorId) => {
+  try {
+    const query = `
+  SELECT 
+  p.product_id, 
+  p.product_name, 
+  f.feature_name
+  FROM 
+  product p
+  JOIN 
+  feature_product_map m ON p.p_id = m.p_id
+  JOIN 
+  feature f ON m.f_id = f.f_id
+  WHERE 
+  p.v_id = $1
+  `;
+    const result = await pool.query(query, [vendorId]);
+    return result.rows.map((row) => ({
+      productId: row.product_id,
+      productName: row.product_name,
+      featureName: row.feature_name,
+    }));
+  } catch (error) {
+    console.error("Error retrieving products with features:", error.message);
+    throw error;
+  }
+};
+
+// Export all functions for use in other files
+module.exports = {
+  pool,
+  insertFeature,
+  deleteFeature,
+  getAllFeatureDetailsFromDb,
+  getFeaturesByVendor,
+  insertUserWithoutPassword,
+  insertProduct,
+  deleteProduct,
+  getAllProducts,
+  getUserByUserId,
+  insertUser,
+  insertUserBatch,
+  getProductsByVendor,
+  insertBatch,
+  getAllBatches,
+  getBatchById,
+  getAllBatchesByVendor,
+  insertEntitlement,
+  deleteEntitlement,
+  getAllEntitlements,
+  getUserBatch,
+  insertFeatureProductMapping,
+  getFeaturesByProductId,
+  insertMapping,
+  getProductsWithFeaturesByVendor,
+};
+
+------------------------------------------------------------
+
+app.js
+
+const express = require("express");
+const {
+  pool,
+  insertUserBatch,
+  getAllProducts,
+} = require("./Database/Database"); // Ensure insertUserBatch is exported properly
+const cors = require("cors");
+const path = require("path");
+const bodyParser = require("body-parser");
+const morgan = require("morgan");
+const jwt = require("jsonwebtoken");
+const winston = require("winston");
+
+const {
+  insertFeature,
+  deleteFeature,
+  getAllFeatureDetailsFromDb,
+  getFeaturesByVendor,
+  insertUserWithoutPassword,
+  insertProduct,
+  deleteProduct,
+  // getAllProductsFromDb,
+  getUserByUserId,
+  insertUser,
+  getProductsByVendor,
+  insertBatch,
+  getAllBatches,
+  getBatchById,
+  insertFeatureProductMapping,
+  getFeaturesByProductId,
+  insertMapping,
+  getProductsWithFeaturesByVendor,
+} = require("./Database/Database");
+
+const app = express();
+
+// JWT Secret
+const JWT_SECRET = "your_jwt_secret"; // Replace with a secure secret
+
+// Logger setup
+const logger = winston.createLogger({
+  level: "info",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.File({ filename: "error.log", level: "error" }),
+    new winston.transports.File({ filename: "combined.log" }),
+  ],
+});
+
+if (process.env.NODE_ENV !== "production") {
+  logger.add(
+    new winston.transports.Console({
+      format: winston.format.simple(),
+    })
+  );
+}
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(bodyParser.json());
+app.use(
+  morgan("combined", {
+    stream: { write: (message) => logger.info(message.trim()) },
+  })
+);
+
+// Middleware for authentication
+const authorize = (roles) => (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).json({ message: "Access token required" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (!roles.includes(decoded.role)) {
+      return res.status(403).json({ message: "Access forbidden" });
+    }
+
+    req.user = decoded; // Set user data for access in next route
+
+    next();
+  } catch (error) {
+    res.status(401).json({ message: "Invalid token" });
+  }
+};
+
+// ** User Authentication **
+
+// Login endpoint
+app.post("/api/login", async (req, res) => {
+  const { userId, password } = req.body;
+
+  if (!userId || !password) {
+    return res
+      .status(400)
+      .json({ message: "User ID and password are required" });
+  }
+
+  try {
+    const user = await getUserByUserId(userId);
+
+    if (!user || user.password !== password) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { userId: user.user_id, role: user.role }, // Include role here
+      JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ token });
+  } catch (error) {
+    logger.error(`Error during login: ${error.message}`, {
+      stack: error.stack,
+    });
+
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// Endpoint to add a new user without a password
+app.post("/api/add-user", async (req, res) => {
+  const { userId, username } = req.body;
+
+  if (!userId || !username) {
+    return res
+      .status(400)
+      .json({ message: "User ID and username are required" });
+  }
+
+  try {
+    await insertUserWithoutPassword(userId, username); // Ensure this function works as expected in Database.js
+    res.status(201).json({ message: "User added successfully" });
+  } catch (error) {
+    logger.error(`Error adding user: ${error.message}`, { stack: error.stack });
+    res.status(500).json({ message: "Server error. Please try again." });
+  }
+});
+
+// ** Feature Endpoints **
+
+// Get all features (Admin sees all, Vendor sees their own)
+app.get("/api/features", authorize(["admin", "vendor"]), async (req, res) => {
+  try {
+    const features =
+      req.user.role === "vendor"
+        ? await getFeaturesByVendor(req.user.userId)
+        : await getAllFeatureDetailsFromDb();
+
+    res.json({ features });
+  } catch (error) {
+    logger.error(`Error fetching features: ${error.message}`, {
+      stack: error.stack,
+    });
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Add a new feature
+app.post("/api/features", authorize(["admin", "vendor"]), async (req, res) => {
+  const { featureId, featureName } = req.body;
+
+  try {
+    await insertFeature(featureId, featureName, req.user.userId);
+    res.status(201).json({ message: "Feature added successfully" });
+  } catch (error) {
+    logger.error(`Error adding feature: ${error.message}`, {
+      stack: error.stack,
+    });
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete a feature (Admins only)
+app.delete(
+  "/api/features/:featureId",
+
+  async (req, res) => {
+    try {
+      await deleteFeature(req.params.featureId);
+      res.status(200).json({ message: "Feature deleted successfully" });
+    } catch (error) {
+      logger.error(`Error deleting feature: ${error.message}`, {
+        stack: error.stack,
+      });
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// ** Product Endpoints **
+
+// Get all products from the database
+app.get("/api/products", authorize(["admin", "vendor"]), async (req, res) => {
+  try {
+    const products =
+      req.user.role === "vendor"
+        ? await getProductsByVendor(req.user.userId)
+        : await getAllProducts();
+
+    res.json({ products });
+  } catch (error) {
+    logger.error(`Error fetching products: ${error.message}`, {
+      stack: error.stack,
+    });
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Add a new product to the database
+app.post("/api/products", authorize(["admin", "vendor"]), async (req, res) => {
+  const { productId, productName, features } = req.body; // Include features in the request body
+
+  try {
+    // Insert the new product
+    const newProduct = await insertProduct(
+      productId,
+      productName,
+      req.user.userId
+    );
+
+    // Insert mappings if features are provided
+    if (features && features.length > 0) {
+      for (let featureId of features) {
+        await insertMapping(featureId, newProduct.p_id, req.user.userId);
+      }
+    }
+
+    res.status(201).json({
+      message: "Product and associated features added successfully",
+      newProduct,
+    });
+  } catch (error) {
+    logger.error(`Error adding product: ${error.message}`, {
+      stack: error.stack,
+    });
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete a product from the database
+app.delete(
+  "/api/products/:productId",
+  authorize(["admin"]),
+  async (req, res) => {
+    try {
+      await deleteProduct(req.params.productId);
+      res.status(200).json({ message: "Product deleted successfully" });
+    } catch (error) {
+      logger.error(`Error deleting product: ${error.message}`, {
+        stack: error.stack,
+      });
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// Add user to batch
+app.post("/api/add-user-batch", async (req, res) => {
+  const { userId, username, batchCode } = req.body;
+
+  try {
+    // Insert the user into the users table
+    await insertUser(userId, username, ""); // Assuming no password is provided
+
+    // Fetch the batch ID using the batch code
+    const batch = await getBatchByCode(batchCode);
+    if (!batch) {
+      return res.status(400).json({ message: "Invalid batch code" });
+    }
+
+    // Insert into user_batch table
+    await insertUserBatch(userId, batch.b_id);
+
+    res.status(200).json({ message: "User batch added successfully!" });
+  } catch (error) {
+    console.error("Error in adding user batch:", error.message);
+    logger.error(`Error in adding user batch: ${error.message}`, {
+      stack: error.stack,
+    });
+    res
+      .status(500)
+      .json({ error: "Failed to add user batch. Please try again." });
+  }
+});
+
+// Helper function to get batch by code
+const getBatchByCode = async (batchCode) => {
+  try {
+    const query = `SELECT * FROM batch WHERE batch_code = $1`;
+    const res = await pool.query(query, [batchCode]);
+    return res.rows[0];
+  } catch (error) {
+    console.error("Error retrieving batch by code:", error.message);
+    throw error;
+  }
+};
+
+// Endpoint to add a new batch
+app.post("/api/batches", authorize(["admin", "vendor"]), async (req, res) => {
+  const { batchCode, batchName } = req.body;
+
+  if (!batchCode) {
+    return res.status(400).json({ message: "Batch Code is required" });
+  }
+
+  if (batchCode < 1000000 || batchCode > 9999999) {
+    return res
+      .status(400)
+      .json({ message: "Batch Code must be between 1,000,000 and 9,999,999" });
+  }
+
+  try {
+    const vendorId = req.user.userId;
+
+    await insertBatch(batchCode, vendorId, batchName);
+    res.status(201).json({ message: "Batch added successfully!" });
+  } catch (error) {
+    logger.error(`Error adding batch: ${error.message}`, {
+      stack: error.stack,
+    });
+    res.status(500).json({ message: "Failed to add batch. Please try again." });
+  }
+});
+
+// Endpoint to fetch all batches
+app.get("/api/batches", authorize(["admin", "vendor"]), async (req, res) => {
+  try {
+    let batches;
+
+    if (req.user.role === "vendor") {
+      const vendorId = req.user.userId;
+      console.log(`Fetching batches for vendor ID: ${vendorId}`);
+      batches = await getAllBatchesByVendor(vendorId);
+    } else {
+      console.log("Fetching all batches for admin");
+      batches = await getAllBatches();
+    }
+
+    console.log("Batches retrieved:", batches);
+    res.status(200).json({ batches });
+  } catch (error) {
+    console.error("Error retrieving batches:", error.message);
+    logger.error(`Error retrieving batches: ${error.message}`, {
+      stack: error.stack,
+    });
+    res
+      .status(500)
+      .json({ message: "Failed to retrieve batches. Please try again." });
+  }
+});
+
+// Endpoint to retrieve a batch by ID
+app.get(
+  "/api/batches/:batchId",
+  authorize(["admin", "vendor"]),
+  async (req, res) => {
+    const { batchId } = req.params;
+
+    try {
+      const batch = await getBatchById(batchId);
+
+      if (!batch) {
+        return res.status(404).json({ message: "Batch not found" });
+      }
+
+      // Restrict access to the vendor's own batches
+      if (req.user.role === "vendor" && batch.vendorId !== req.user.userId) {
+        return res.status(403).json({ message: "Access forbidden" });
+      }
+
+      res.status(200).json({ batch });
+    } catch (error) {
+      logger.error(`Error retrieving batch: ${error.message}`, {
+        stack: error.stack,
+      });
+      res
+        .status(500)
+        .json({ message: "Failed to retrieve batch. Please try again." });
+    }
+  }
+);
+
+// Update the getAllBatches function to support vendor-specific filtering
+const getAllBatchesByVendor = async (vendorId) => {
+  try {
+    const query = `SELECT * FROM batch WHERE v_id = $1`;
+    const res = await pool.query(query, [vendorId]);
+
+    return res.rows.map((batch) => ({
+      batchId: batch.b_id,
+      batchCode: batch.batch_code,
+      batchName: batch.batch_name,
+      vendorId: batch.v_id,
+    }));
+  } catch (error) {
+    console.error("Error retrieving vendor-specific batches:", error);
+    throw error;
+  }
+};
+
+// Add a new entitlement to the database
+app.post(
+  "/api/entitlements",
+  authorize(["admin", "vendor"]),
+  async (req, res) => {
+    const { entitlementId, product } = req.body;
+    try {
+      await insertEntitlement(entitlementId, product);
+      res.status(201).json({ message: "Entitlement added successfully" });
+    } catch (error) {
+      logger.error(`Error adding entitlement: ${error.message}`, {
+        stack: error.stack,
+      });
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+// Delete an entitlement from the database
+app.delete(
+  "/api/entitlements/:entitlementId",
+  authorize(["admin"]),
+  async (req, res) => {
+    try {
+      await deleteEntitlement(req.params.entitlementId);
+      res.status(200).json({ message: "Entitlement deleted successfully" });
+    } catch (error) {
+      logger.error(`Error deleting entitlement: ${error.message}`, {
+        stack: error.stack,
+      });
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+app.post(
+  "/api/feature-product-map",
+  authorize(["admin", "vendor"]),
+  async (req, res) => {
+    const { features, products, v_id } = req.body;
+    try {
+      const query = `
+      INSERT INTO public.feature_product_map (f_id, p_id)
+      VALUES ($1, $2)
+      RETURNING *;
+    `;
+      const result = await pool.query(query, [features, products]);
+
+      if (result.rows.length > 0) {
+        res.status(201).json(result.rows[0]);
+      } else {
+        res.status(400).json({ error: "Failed to insert into mappingtable" });
+      }
+    } catch (error) {
+      console.error("Error inserting into mappingtable:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+app.post("/api/feature-product-map", async (req, res) => {
+  const { f_id, p_id } = req.body;
+
+  try {
+    await insertFeatureProductMapping(f_id, p_id);
+    res
+      .status(201)
+      .json({ message: "Feature-Product mapping added successfully!" });
+  } catch (error) {
+    console.error("Error adding feature-product mapping:", error.message);
+    res.status(500).json({
+      message: "Failed to add feature-product mapping. Please try again.",
+    });
+  }
+});
+
+app.get(
+  "/api/products-with-features",
+  authorize(["vendor"]),
+  async (req, res) => {
+    try {
+      const products = await getProductsWithFeaturesByVendor(req.user.userId);
+      res.json({ products });
+    } catch (error) {
+      logger.error(`Error fetching products with features: ${error.message}`, {
+        stack: error.stack,
+      });
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, "../Frontend")));
+
+// Handle all other requests by sending the React app
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../Frontend", "index.html"));
+});
+
+// 404 route for undefined endpoints
+app.use((req, res) => {
+  logger.warn("Attempted to access undefined endpoint");
+  res.status(404).send("Endpoint not found");
+});
+
+// Use environment variable for port or default to 5001
+const port = process.env.PORT || 5001;
+
+app.listen(port, () => {
+  logger.info(`Server running on port ${port}`);
+});
+
+
+----------------------------------------------------------
+
+addbatch
+
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+
+const AddBatch = () => {
+  const [batchCode, setBatchCode] = useState("");
+  const [batchName, setBatchName] = useState("");
+  const [message, setMessage] = useState("");
+  const [batches, setBatches] = useState([]);
+
+  useEffect(() => {
+    const fetchBatches = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await axios.get("http://localhost:5001/api/batches", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        setBatches(response.data.batches || []);
+      } catch (error) {
+        console.error(
+          "Error fetching batches:",
+          error.response || error.message
+        );
+        setMessage("Failed to fetch batches.");
+      }
+    };
+    fetchBatches();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setMessage(""); // Clear previous messages
+
+    if (!batchCode) {
+      setMessage("Batch Code is required.");
+      return;
+    }
+
+    // Validate batchCode within the specified range
+    if (batchCode < 1000000 || batchCode > 9999999) {
+      setMessage("Batch Code must be between 1,000,000 and 9,999,999.");
+      return;
+    }
+
+    try {
+      // Get token from localStorage or sessionStorage
+      const token = localStorage.getItem("token"); // Adjust based on your storage method
+
+      // Add Authorization header to the request
+      const response = await axios.post(
+        "http://localhost:5001/api/batches",
+        { batchCode, batchName },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      setMessage(response.data.message); // Success message from server
+      setBatchCode(""); // Reset form fields
+      setBatchName(""); // Reset batch name field
+
+      // Fetch the updated list of batches
+      const updatedResponse = await axios.get(
+        "http://localhost:5001/api/batches",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      setBatches(updatedResponse.data.batches || []); // Update the batches list
+    } catch (error) {
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.message
+      ) {
+        setMessage(error.response.data.message); // Error message from server
+      } else {
+        setMessage("An unexpected error occurred. Please try again.");
+      }
+    }
+  };
+
+  return (
+    <div style={containerStyle}>
+      <div style={formContainerStyle}>
+        <h1>Add Batch</h1>
+        <form onSubmit={handleSubmit} style={formStyle}>
+          <div style={inputGroupStyle}>
+            <label htmlFor="batchCode" style={labelStyle}>
+              Batch Code:
+            </label>
+            <input
+              type="number"
+              id="batchCode"
+              value={batchCode}
+              onChange={(e) => setBatchCode(e.target.value)}
+              style={inputStyle}
+              placeholder="Enter Batch Code"
+              min="1000000"
+              max="9999999"
+              required
+            />
+          </div>
+          <div style={inputGroupStyle}>
+            <label htmlFor="batchName" style={labelStyle}>
+              Batch Name (Optional):
+            </label>
+            <input
+              type="text"
+              id="batchName"
+              value={batchName}
+              onChange={(e) => setBatchName(e.target.value)}
+              style={inputStyle}
+              placeholder="Enter Batch Name"
+            />
+          </div>
+          <button type="submit" style={buttonStyle}>
+            Submit
+          </button>
+        </form>
+        {message && <p style={messageStyle}>{message}</p>}
+      </div>
+
+      <div style={tableContainerStyle}>
+        <h2>All Batches</h2>
+        <table style={tableStyle}>
+          <thead>
+            <tr>
+              <th style={tableHeaderStyle}>Batch Code</th>
+              <th style={tableHeaderStyle}>Batch Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            {batches.length > 0 ? (
+              batches.map((batch) => (
+                <tr key={batch.batchCode}>
+                  <td style={tableCellStyle}>{batch.batchCode}</td>
+                  <td style={tableCellStyle}>{batch.batchName}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="2" style={tableCellStyle}>
+                  No batches available
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const containerStyle = {
+  maxWidth: "800px",
+  margin: "0 auto",
+  display: "flex",
+  flexDirection: "column",
+  gap: "20px", // Gap between the two boxes
+};
+
+const formContainerStyle = {
+  padding: "20px",
+  border: "1px solid #ccc",
+  borderRadius: "10px",
+  boxShadow: "0 2px 5px rgba(0, 0, 0, 0.1)",
+};
+
+const formStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "15px",
+};
+
+const inputGroupStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "5px",
+};
+
+const labelStyle = {
+  fontSize: "14px",
+  fontWeight: "bold",
+};
+
+const inputStyle = {
+  padding: "10px",
+  fontSize: "16px",
+  border: "1px solid #ccc",
+  borderRadius: "5px",
+};
+
+const buttonStyle = {
+  padding: "10px 20px",
+  fontSize: "16px",
+  color: "#fff",
+  backgroundColor: "#007bff",
+  border: "none",
+  borderRadius: "5px",
+  cursor: "pointer",
+};
+
+const messageStyle = {
+  marginTop: "20px",
+  fontSize: "14px",
+  color: "red",
+};
+
+const tableContainerStyle = {
+  padding: "20px",
+  border: "1px solid #ccc",
+  borderRadius: "10px",
+  boxShadow: "0 2px 5px rgba(0, 0, 0, 0.1)",
+};
+
+const tableStyle = {
+  width: "100%",
+  borderCollapse: "collapse",
+  marginTop: "20px",
+};
+
+const tableHeaderStyle = {
+  padding: "10px",
+  border: "1px solid #ccc",
+  backgroundColor: "#007bff",
+  color: "#fff",
+  textAlign: "left",
+};
+
+const tableCellStyle = {
+  padding: "10px",
+  border: "1px solid #ccc",
+};
+
+export default AddBatch;
+
+
+---------------------------------------------------
+
+adduser
+
+import React, { useState, useEffect } from "react";
+import {
+  TextField,
+  Button,
+  Container,
+  Typography,
+  Box,
+  Alert,
+  Grid,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
+} from "@mui/material";
+import axios from "axios";
+
+const AddUserBatchForm = () => {
+  const [userId, setUserId] = useState("");
+  const [username, setUsername] = useState("");
+  const [batchCode, setBatchCode] = useState(""); // Initially empty, will be populated with available codes
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [batchOptions, setBatchOptions] = useState([]); // Initialize as empty array
+
+  useEffect(() => {
+    // Fetch available batch codes from the API
+    const fetchBatchOptions = async () => {
+      try {
+        const token = localStorage.getItem("token"); // Retrieve token from local storage
+        const response = await axios.get("http://localhost:5001/api/batches", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        // Assuming API returns batches in the format: { batches: [{batchId, batchCode}, ...] }
+        setBatchOptions(response.data.batches || []); // Ensure batches is an array
+      } catch (error) {
+        setError("Failed to fetch batch options.");
+      }
+    };
+
+    fetchBatchOptions();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+
+    try {
+      // Add the user to the batch
+      await axios.post("http://localhost:5001/api/add-user-batch", {
+        userId,
+        username,
+        batchCode,
+      });
+
+      setMessage("User batch added successfully!");
+      setUserId("");
+      setUsername("");
+      setBatchCode(""); // Reset batch code selection
+    } catch (error) {
+      setError("Failed to add user batch. Please try again.");
+    }
+  };
+
+  return (
+    <Container
+      maxWidth="sm"
+      sx={{
+        backgroundColor: "#f9f9f9",
+        padding: "2rem",
+        borderRadius: "8px",
+        boxShadow: "0 4px 10px rgba(0, 0, 0, 0.1)",
+        mt: 4,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "50vh",
+        marginTop: "12vh",
+      }}
+    >
+      <Typography
+        variant="h4"
+        sx={{ mb: 2, fontWeight: "bold", textAlign: "center" }}
+      >
+        Add User to Batch
+      </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      {message && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          {message}
+        </Alert>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="User ID"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              required
+              variant="outlined"
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              variant="outlined"
+            />
+          </Grid>
+
+          {/* Batch Code Dropdown */}
+          <Grid item xs={12}>
+            <FormControl fullWidth variant="outlined" required>
+              <InputLabel>Batch Code</InputLabel>
+              <Select
+                value={batchCode}
+                onChange={(e) => setBatchCode(e.target.value)}
+                label="Batch Code"
+              >
+                {batchOptions.length > 0 ? (
+                  batchOptions.map((batch) => (
+                    <MenuItem key={batch.batchCode} value={batch.batchCode}>
+                      {batch.batchCode}
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem disabled>No batch codes available</MenuItem>
+                )}
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            mt: 3,
+          }}
+        >
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            sx={{
+              padding: "0.75rem 2rem",
+              fontWeight: "bold",
+            }}
+          >
+            Add User to Batch
+          </Button>
+        </Box>
+      </form>
+    </Container>
+  );
+};
+
+export default AddUserBatchForm;

@@ -1,0 +1,954 @@
+ProductPage.js
+
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { useFormik } from "formik";
+import * as Yup from "yup";
+import DeleteIcon from "@mui/icons-material/Delete";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import {
+  Box,
+  Table,
+  TableBody,
+  TableCell,
+  CircularProgress,
+  TableHead,
+  TableRow,
+  Button,
+  Typography,
+  TextField,
+  Card,
+  CardContent,
+  IconButton,
+  Container,
+  Paper,
+  Alert,
+  ToggleButton,
+  ToggleButtonGroup,
+} from "@mui/material";
+
+// Load data function
+const loadData = async () => {
+  try {
+    const [featuresResponse, productsResponse] = await Promise.all([
+      axios.get("http://localhost:5001/api/features"),
+      axios.get("http://localhost:5001/api/products"),
+    ]);
+
+    return {
+      featuresData: featuresResponse.data.features,
+      productsData: Array.isArray(productsResponse.data)
+        ? productsResponse.data
+        : productsResponse.data.data || [],
+    };
+  } catch (error) {
+    toast.error("Error loading data");
+    throw error;
+  }
+};
+
+const LicenseComponent = () => {
+  const [products, setProducts] = useState([]);
+  const [features, setFeatures] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedFeatures, setSelectedFeatures] = useState([]);
+
+  // Fetch initial data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const { featuresData, productsData } = await loadData();
+        setFeatures(featuresData);
+        setProducts(productsData); // Initialize products state
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const formik = useFormik({
+    initialValues: {
+      productId: "",
+      productName: "",
+      selectedFeatures: [],
+    },
+    validationSchema: Yup.object({
+      productId: Yup.number()
+        .typeError("Product ID must be a number")
+        .required("Product ID is required"),
+      productName: Yup.string().required("Product Name is required"),
+      selectedFeatures: Yup.array().min(
+        1,
+        "At least one feature must be selected"
+      ),
+    }),
+    onSubmit: async (values, { resetForm }) => {
+      setSubmitLoading(true);
+      setSuccessMessage("");
+
+      const newProduct = {
+        productId: values.productId,
+        productName: values.productName,
+        features: values.selectedFeatures.join(", "), // Join selected features for display
+      };
+
+      try {
+        const response = await axios.post(
+          "http://localhost:5001/api/products",
+          newProduct
+        );
+
+        if (response.status === 201) {
+          setProducts([...products, newProduct]); // Update the products list directly
+          setSuccessMessage("Product added successfully!");
+          resetForm();
+          setSelectedFeatures([]); // Reset selected features
+        }
+      } catch (error) {
+        toast.error("Error adding product");
+      } finally {
+        setSubmitLoading(false);
+      }
+    },
+  });
+
+  const handleFeatureSelect = (event, newSelectedFeatures) => {
+    setSelectedFeatures(newSelectedFeatures);
+    formik.setFieldValue("selectedFeatures", newSelectedFeatures);
+  };
+
+  const handleProductSelect = (product) => {
+    setSelectedProduct(product);
+  };
+
+  if (loading) return <CircularProgress />;
+
+  const buttonStyle = {
+    margin: "0.2em",
+  };
+
+  const selectedButtonStyle = {
+    ...buttonStyle,
+    backgroundColor: "lightblue",
+  };
+
+  return (
+    <Container>
+      <Box sx={{ mt: 4, mb: 2 }}>
+        <Typography variant="h4" gutterBottom>
+          Add New Product
+        </Typography>
+        <form onSubmit={formik.handleSubmit}>
+          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+            <TextField
+              label="Product ID"
+              variant="outlined"
+              name="productId"
+              type="text"
+              value={formik.values.productId}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              error={
+                formik.touched.productId && Boolean(formik.errors.productId)
+              }
+              helperText={formik.touched.productId && formik.errors.productId}
+              fullWidth
+            />
+            <TextField
+              label="Product Name"
+              variant="outlined"
+              name="productName"
+              type="text"
+              value={formik.values.productName}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              error={
+                formik.touched.productName && Boolean(formik.errors.productName)
+              }
+              helperText={
+                formik.touched.productName && formik.errors.productName
+              }
+              fullWidth
+            />
+          </Box>
+          <ToggleButtonGroup
+            value={selectedFeatures}
+            onChange={handleFeatureSelect}
+            aria-label="Feature Selection"
+            style={{ display: "flex", flexWrap: "wrap" }}
+          >
+            {features.map((feature) => (
+              <ToggleButton
+                key={feature.featureId}
+                value={feature.featureName}
+                aria-label={`Feature ${feature.featureName}`}
+                style={
+                  selectedFeatures.includes(feature.featureName)
+                    ? selectedButtonStyle
+                    : buttonStyle
+                }
+              >
+                {feature.featureName}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          {formik.touched.selectedFeatures &&
+            formik.errors.selectedFeatures && (
+              <Typography color="error">
+                {formik.errors.selectedFeatures}
+              </Typography>
+            )}
+          <Box sx={{ mt: 2 }}>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              disabled={submitLoading}
+            >
+              {submitLoading ? <CircularProgress size={24} /> : "Add Product"}
+            </Button>
+          </Box>
+        </form>
+        {successMessage && (
+          <Alert severity="success" sx={{ mt: 2 }}>
+            {successMessage}
+          </Alert>
+        )}
+      </Box>
+      <Box sx={{ display: "flex", gap: 2 }}>
+        {/* Left side for Product List */}
+        <Card sx={{ width: "60%" }}>
+          <CardContent>
+            <Typography variant="h5" gutterBottom sx={{ mt: 4 }}>
+              Product List
+            </Typography>
+            <Paper>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Product ID</TableCell>
+                    <TableCell>Product Name</TableCell>
+                    <TableCell>Features</TableCell>
+                    <TableCell width={7}></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {products.length > 0 ? (
+                    products.map((product) => (
+                      <TableRow
+                        key={product.productId}
+                        onClick={() => handleProductSelect(product)}
+                      >
+                        <TableCell>{product.productId}</TableCell>
+                        <TableCell>{product.productName}</TableCell>
+                        <TableCell>{product.features}</TableCell>
+                        <TableCell>
+                          <IconButton
+                            onClick={() => handleDelete(product.productId)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={4} align="center">
+                        Nothing added yet
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Paper>
+          </CardContent>
+        </Card>
+        <Card sx={{ width: "40%" }}>
+          <CardContent>
+            {selectedProduct ? (
+              <div>
+                <Typography variant="h6">Product Details</Typography>
+                <Typography variant="subtitle1">
+                  Product ID: {selectedProduct.productId}
+                </Typography>
+                <Typography variant="subtitle1">
+                  Product Name: {selectedProduct.productName}
+                </Typography>
+                <Typography variant="subtitle1">Features:</Typography>
+                {selectedProduct.features.split(", ").map((feat, index) => (
+                  <Typography key={index}>
+                    {features.find((f) => f.featureName === feat)
+                      ?.featureName || feat}
+                  </Typography>
+                ))}
+              </div>
+            ) : (
+              <Typography variant="h6">
+                Select a Product to view details
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+      <ToastContainer />
+    </Container>
+  );
+};
+
+export default LicenseComponent;
+
+=================================================================
+
+app.js
+
+
+
+const express = require("express");
+const cors = require("cors");
+const path = require("path");
+const morgan = require("morgan");
+const winston = require("winston");
+const {
+  ensureFeatureTableExists,
+  insertFeature,
+  deleteFeature,
+  getAllFeatureDetailsFromDb,
+  ensureProductTableExists,
+  insertProduct,
+  deleteProduct,
+  getAllProductsFromDb,
+} = require("./Database/Database");
+
+const app = express();
+
+// Logger setup
+const logger = winston.createLogger({
+  level: "info",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.File({ filename: "error.log", level: "error" }),
+    new winston.transports.File({ filename: "combined.log" }),
+  ],
+});
+
+if (process.env.NODE_ENV !== "production") {
+  logger.add(
+    new winston.transports.Console({
+      format: winston.format.simple(),
+    })
+  );
+}
+
+// Middleware
+app.use(cors()); // Allow all origins
+app.use(express.json()); // Parse JSON bodies
+app.use(
+  morgan("combined", {
+    stream: { write: (message) => logger.info(message.trim()) },
+  })
+);
+
+// Endpoint to get all features from the database
+app.get("/api/features", async (req, res) => {
+  logger.info("Received request to fetch all features");
+  try {
+    const features = await getAllFeatureDetailsFromDb();
+    res.json({ features });
+  } catch (error) {
+    logger.error(`Error fetching features: ${error.message}`);
+    res
+      .status(500)
+      .json({ message: `Error fetching features: ${error.message}` });
+  }
+});
+
+// Endpoint to add a new feature to the database
+app.post("/api/features", async (req, res) => {
+  logger.info("Received request to add a new feature");
+  const { featureId, featureName } = req.body;
+  try {
+    await insertFeature(featureId, featureName);
+    res.status(201).json({ message: "Feature added successfully" });
+  } catch (error) {
+    logger.error(`Error adding feature: ${error.message}`);
+    res.status(500).json({ message: `Error adding feature: ${error.message}` });
+  }
+});
+
+// Endpoint to delete a feature from the database
+app.delete("/api/features/:featureId", async (req, res) => {
+  logger.info(
+    `Received request to delete feature with ID ${req.params.featureId}`
+  );
+  try {
+    await deleteFeature(req.params.featureId);
+    res.status(200).json({ message: "Feature deleted successfully" });
+  } catch (error) {
+    logger.error(`Error deleting feature: ${error.message}`);
+    res
+      .status(500)
+      .json({ message: `Error deleting feature: ${error.message}` });
+  }
+});
+
+// Endpoint to get all products from the database
+app.get("/api/products", async (req, res) => {
+  logger.info("Received request to fetch all products");
+  try {
+    const products = await getAllProductsFromDb();
+    res.json({ products });
+  } catch (error) {
+    logger.error(`Error fetching products: ${error.message}`);
+    res
+      .status(500)
+      .json({ message: `Error fetching products: ${error.message}` });
+  }
+});
+
+// Endpoint to add a new product to the database
+app.post("/api/products", async (req, res) => {
+  logger.info("Received request to add a new product");
+  const { productId, productName, features } = req.body;
+  logger.info(`Product Data: ${JSON.stringify(req.body)}`); // Log the incoming data
+
+  try {
+    await insertProduct(productId, productName, features);
+    res.status(201).json({ message: "Product added successfully" });
+  } catch (error) {
+    logger.error(`Error adding product: ${error.message}`);
+    res.status(500).json({ message: `Error adding product: ${error.message}` });
+  }
+});
+
+// Endpoint to delete a product from the database
+app.delete("/api/products/:productId", async (req, res) => {
+  logger.info(
+    `Received request to delete product with ID ${req.params.productId}`
+  );
+  try {
+    await deleteProduct(req.params.productId);
+    res.status(200).json({ message: "Product deleted successfully" });
+  } catch (error) {
+    logger.error(`Error deleting product: ${error.message}`);
+    res
+      .status(500)
+      .json({ message: `Error deleting product: ${error.message}` });
+  }
+});
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, "../Frontend")));
+
+// Handle all other requests by sending the React app
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../Frontend", "index.html"));
+});
+
+// 404 route for undefined endpoints
+app.use((req, res) => {
+  logger.warn("Attempted to access undefined endpoint");
+  res.status(404).send("Endpoint not found");
+});
+
+// Use environment variable for port or default to 5001
+const port = process.env.PORT || 5001;
+app.listen(port, () => {
+  logger.info(`Server running on port ${port}`);
+});
+
+==========================================================================
+
+database.js
+
+const { Client } = require("pg");
+
+// PostgreSQL server connection details
+const config = {
+  host: "localhost",
+  user: "postgres",
+  password: "admin",
+  port: 5432,
+};
+
+const databaseName = "LICENSESOLUTION";
+
+// Function to create the database if it doesn't exist
+const createDatabaseIfNotExists = async () => {
+  const client = new Client(config);
+
+  try {
+    await client.connect();
+    console.log("Connected to PostgreSQL server.");
+
+    const checkDbQuery = `
+      SELECT 1
+      FROM pg_database
+      WHERE datname = $1;
+    `;
+    const res = await client.query(checkDbQuery, [databaseName]);
+
+    if (res.rowCount === 0) {
+      const createDbQuery = `CREATE DATABASE "${databaseName}";`;
+      await client.query(createDbQuery);
+      console.log(`Database "${databaseName}" created successfully.`);
+    } else {
+      console.log(`Database "${databaseName}" already exists.`);
+    }
+  } catch (err) {
+    console.error("Error:", err.message);
+  } finally {
+    await client.end();
+    console.log("Connection closed.");
+  }
+};
+
+// Function to create the "Feature" table if it doesn't exist
+const ensureFeatureTableExists = async () => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const tableQuery = `
+      CREATE TABLE IF NOT EXISTS Feature (
+        Feature_Record_Number SERIAL PRIMARY KEY,
+        Feature_Id INT,
+        Feature_Name VARCHAR(50)
+      );
+    `;
+    await client.query(tableQuery);
+    console.log("Feature table ensured.");
+  } catch (error) {
+    console.error("Error ensuring Feature table:", error.message);
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to insert a new feature into the "Feature" table
+const insertFeature = async (featureId, featureName) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const insertQuery = `
+      INSERT INTO Feature (Feature_Id, Feature_Name)
+      VALUES ($1, $2)
+    `;
+    await client.query(insertQuery, [featureId, featureName]);
+    console.log("Feature inserted:", featureId, featureName);
+  } catch (error) {
+    console.error("Error inserting feature:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to delete a feature from the "Feature" table
+const deleteFeature = async (featureId) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const deleteQuery = `
+      DELETE FROM Feature WHERE Feature_Id = $1
+    `;
+    await client.query(deleteQuery, [featureId]);
+    console.log("Feature deleted:", featureId);
+  } catch (error) {
+    console.error("Error deleting feature:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to retrieve all features from the "Feature" table
+const getAllFeatureDetailsFromDb = async () => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const featureRes = await client.query("SELECT * FROM Feature");
+    const features = featureRes.rows.map((feature) => ({
+      featureId: feature.feature_id,
+      featureName: feature.feature_name,
+    }));
+    console.log("Features fetched:", features);
+    return features;
+  } catch (error) {
+    console.error(`Error retrieving features: ${error.message}`);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to create the "Product" table if it doesn't exist
+const ensureProductTableExists = async () => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const tableQuery = `
+      CREATE TABLE IF NOT EXISTS Product (
+        Product_Record_Number SERIAL PRIMARY KEY,
+        Product_Id INT,
+        Product_Name VARCHAR(100) NOT NULL,
+        Features TEXT
+      );
+    `;
+    await client.query(tableQuery);
+    console.log("Product table ensured.");
+  } catch (error) {
+    console.error("Error ensuring Product table:", error.message);
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to insert a new product into the "Product" table
+const insertProduct = async (productId, productName, features) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const insertQuery = `
+      INSERT INTO Product (Product_Id, Product_Name, Features)
+      VALUES ($1, $2, $3);
+    `;
+    console.log(`Inserting Product: ${productId}, ${productName}, ${features}`); // Log the data being inserted
+    await client.query(insertQuery, [productId, productName, features]);
+    console.log("Product inserted:", productId, productName, features);
+  } catch (error) {
+    console.error("Error inserting product:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to delete a product from the "Product" table
+const deleteProduct = async (productId) => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const deleteQuery = `
+      DELETE FROM Product WHERE Product_Id = $1;
+    `;
+    await client.query(deleteQuery, [productId]);
+    console.log("Product deleted:", productId);
+  } catch (error) {
+    console.error("Error deleting product:", error.message);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Function to retrieve all products from the "Product" table
+const getAllProductsFromDb = async () => {
+  const dbConfig = { ...config, database: databaseName };
+  const client = new Client(dbConfig);
+
+  try {
+    await client.connect();
+    console.log(`Connected to database "${databaseName}".`);
+
+    const productRes = await client.query("SELECT * FROM Product");
+    const products = productRes.rows.map((product) => ({
+      productId: product.product_id,
+      productName: product.product_name,
+      features: product.features,
+    }));
+    console.log("Products fetched:", products);
+    return products;
+  } catch (error) {
+    console.error(`Error retrieving products: ${error.message}`);
+    throw error;
+  } finally {
+    await client.end();
+    console.log("Connection to database closed.");
+  }
+};
+
+// Ensure tables exist on startup
+(async () => {
+  await createDatabaseIfNotExists();
+  await ensureFeatureTableExists(); // Feature Table
+  await ensureProductTableExists(); // Product Table
+})();
+
+module.exports = {
+  ensureFeatureTableExists,
+  insertFeature,
+  deleteFeature,
+  getAllFeatureDetailsFromDb,
+  ensureProductTableExists,
+  insertProduct,
+  deleteProduct,
+  getAllProductsFromDb,
+};
+
+==============================================================
+
+Feature.js
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { useFormik } from "formik";
+import DeleteIcon from "@mui/icons-material/Delete";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import {
+  TextField,
+  Button,
+  Container,
+  IconButton,
+  CardContent,
+  Card,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Paper,
+  Typography,
+  Box,
+  CircularProgress,
+  Alert,
+} from "@mui/material";
+
+const LicenseComponent = () => {
+  const [features, setFeatures] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+
+  // Fetch features from the database
+  useEffect(() => {
+    const fetchFeatures = async () => {
+      try {
+        const response = await axios.get("http://localhost:5001/api/features");
+        setFeatures(response.data.features || []); // Assuming API response has `features`
+      } catch (error) {
+        toast.error("Error loading features from the database");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFeatures();
+  }, []);
+
+  // Formik for adding features
+  const formik = useFormik({
+    initialValues: {
+      featureId: "",
+      featureName: "",
+    },
+    onSubmit: async (values, { resetForm }) => {
+      const errors = {};
+
+      if (!values.featureId) {
+        errors.featureId = "Feature ID is required";
+      } else if (isNaN(values.featureId)) {
+        errors.featureId = "Feature ID must be a number";
+      } else if (
+        features.some(
+          (feature) => feature.featureId === values.featureId.toString()
+        )
+      ) {
+        errors.featureId = "Feature ID already exists";
+      }
+
+      if (!values.featureName) {
+        errors.featureName = "Feature Name is required";
+      }
+
+      if (Object.keys(errors).length > 0) {
+        formik.setErrors(errors);
+        return;
+      }
+
+      setSubmitLoading(true);
+      setSuccessMessage("");
+
+      try {
+        const newFeature = {
+          featureId: values.featureId,
+          featureName: values.featureName,
+        };
+
+        // Add the new feature to the database
+        await axios.post("http://localhost:5001/api/features", newFeature);
+
+        // Update state with the new feature
+        setFeatures((prevFeatures) => [...prevFeatures, newFeature]);
+        setSuccessMessage("Feature added successfully!");
+        resetForm();
+      } catch (error) {
+        toast.error("Error adding feature to the database");
+      } finally {
+        setSubmitLoading(false);
+      }
+    },
+  });
+
+  // Delete a feature
+  const handleDelete = async (featureId) => {
+    try {
+      await axios.delete(`http://localhost:5001/api/features/${featureId}`);
+      setFeatures((prevFeatures) =>
+        prevFeatures.filter((feature) => feature.featureId !== featureId)
+      );
+      setSuccessMessage("Feature deleted successfully!");
+    } catch (error) {
+      toast.error("Error deleting feature from the database");
+    }
+  };
+
+  if (loading) return <CircularProgress />;
+
+  return (
+    <Container>
+      <Box sx={{ mt: 4, mb: 2 }}>
+        <Typography variant="h4" gutterBottom>
+          Add New Feature
+        </Typography>
+        <form onSubmit={formik.handleSubmit}>
+          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+            <TextField
+              label="Feature ID"
+              variant="outlined"
+              name="featureId"
+              type="text"
+              value={formik.values.featureId}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              error={
+                formik.touched.featureId && Boolean(formik.errors.featureId)
+              }
+              helperText={formik.touched.featureId && formik.errors.featureId}
+              fullWidth
+            />
+            <TextField
+              label="Feature Name"
+              variant="outlined"
+              name="featureName"
+              type="text"
+              value={formik.values.featureName}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              error={
+                formik.touched.featureName && Boolean(formik.errors.featureName)
+              }
+              helperText={
+                formik.touched.featureName && formik.errors.featureName
+              }
+              fullWidth
+            />
+          </Box>
+          <Box sx={{ mt: 2 }}>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              disabled={submitLoading}
+            >
+              {submitLoading ? <CircularProgress size={24} /> : "Add Feature"}
+            </Button>
+          </Box>
+        </form>
+        {successMessage && (
+          <Alert severity="success" sx={{ mt: 2 }}>
+            {successMessage}
+          </Alert>
+        )}
+      </Box>
+      <Card>
+        <CardContent>
+          <Typography variant="h5" gutterBottom sx={{ mt: 4 }}>
+            Feature List
+          </Typography>
+          <Paper>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Feature ID</TableCell>
+                  <TableCell>Feature Name</TableCell>
+                  <TableCell width={7}></TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {features.length > 0 ? (
+                  features.map((feature) => (
+                    <TableRow key={feature.featureId}>
+                      <TableCell>{feature.featureId}</TableCell>
+                      <TableCell>{feature.featureName}</TableCell>
+                      <TableCell>
+                        <IconButton
+                          onClick={() => handleDelete(feature.featureId)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={3} align="center">
+                      Nothing added yet
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Paper>
+        </CardContent>
+      </Card>
+      <ToastContainer />
+    </Container>
+  );
+};
+
+export default LicenseComponent

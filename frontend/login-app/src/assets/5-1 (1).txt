@@ -1,0 +1,252 @@
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { useFormik } from "formik";
+import * as Yup from "yup";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import {
+  Box,
+  Table,
+  TableBody,
+  TableCell,
+  CircularProgress,
+  TableHead,
+  TableRow,
+  Button,
+  Typography,
+  TextField,
+  Card,
+  CardContent,
+  Container,
+  Alert,
+  ToggleButton,
+  ToggleButtonGroup,
+  Grid,
+} from "@mui/material";
+
+const ProductPage = () => {
+  const [products, setProducts] = useState([]);
+  const [features, setFeatures] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedFeatures, setSelectedFeatures] = useState([]);
+
+  const token = localStorage.getItem("token");
+  const API_BASE_URL = "http://localhost:5001/api";
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [featuresResponse, productsResponse] = await Promise.all([
+          axios.get(`${API_BASE_URL}/features`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get(`${API_BASE_URL}/products-with-features`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+        setFeatures(featuresResponse.data.features || []);
+        setProducts(productsResponse.data.products || []);
+        setSuccessMessage("Products and features loaded successfully!");
+      } catch (error) {
+        toast.error("Error loading data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [token]);
+
+  const refreshProducts = async () => {
+    try {
+      const productsResponse = await axios.get(
+        `${API_BASE_URL}/products-with-features`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setProducts(productsResponse.data.products || []);
+    } catch (error) {
+      toast.error("Error refreshing product list");
+    }
+  };
+
+  const formik = useFormik({
+    initialValues: {
+      productId: "",
+      productName: "",
+      selectedFeatures: [],
+    },
+    validationSchema: Yup.object({
+      productId: Yup.number()
+        .typeError("Product ID must be a number")
+        .required("Product ID is required")
+        .test("unique-id", "Product ID already exists", (value) => {
+          return !products.some((product) => product.productId === value);
+        }),
+      productName: Yup.string().required("Product Name is required"),
+      selectedFeatures: Yup.array().min(1, "At least one feature must be selected"),
+    }),
+    onSubmit: async (values, { resetForm }) => {
+      setSubmitLoading(true);
+      setSuccessMessage("");
+
+      try {
+        const featureIds = values.selectedFeatures.map((featureName) => {
+          const feature = features.find((f) => f.featureName === featureName);
+          return feature?.f_id;
+        });
+
+        const response = await axios.post(
+          `${API_BASE_URL}/products`,
+          {
+            productId: values.productId,
+            productName: values.productName,
+            features: featureIds,
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (response.status === 201) {
+          setSuccessMessage("Product added successfully!");
+          resetForm();
+          setSelectedFeatures([]);
+          await refreshProducts();
+        }
+      } catch (error) {
+        toast.error("Error adding product");
+      } finally {
+        setSubmitLoading(false);
+      }
+    },
+  });
+
+  const handleFeatureSelect = (event, newSelectedFeatures) => {
+    setSelectedFeatures(newSelectedFeatures);
+    formik.setFieldValue("selectedFeatures", newSelectedFeatures);
+  };
+
+  const handleProductSelect = (product) => {
+    setSelectedProduct(product);
+  };
+
+  if (loading) return <CircularProgress />;
+
+  // Group products by productId to handle multiple features per product
+  const groupedProducts = products.reduce((acc, curr) => {
+    const { productId, productName, featureName } = curr;
+    if (!acc[productId]) {
+      acc[productId] = { productId, productName, features: [] };
+    }
+    acc[productId].features.push(featureName);
+    return acc;
+  }, {});
+
+  return (
+    <Container>
+      <Box sx={{ mt: 4, mb: 2 }}>
+        <Typography variant="h4" gutterBottom>
+          Add New Product
+        </Typography>
+        <form onSubmit={formik.handleSubmit}>
+          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+            <TextField
+              label="Product ID"
+              variant="outlined"
+              name="productId"
+              value={formik.values.productId}
+              onChange={formik.handleChange}
+              error={formik.touched.productId && Boolean(formik.errors.productId)}
+              helperText={formik.touched.productId && formik.errors.productId}
+              fullWidth
+            />
+            <TextField
+              label="Product Name"
+              variant="outlined"
+              name="productName"
+              value={formik.values.productName}
+              onChange={formik.handleChange}
+              error={
+                formik.touched.productName && Boolean(formik.errors.productName)
+              }
+              helperText={formik.touched.productName && formik.errors.productName}
+              fullWidth
+            />
+          </Box>
+          <ToggleButtonGroup
+            value={selectedFeatures}
+            onChange={handleFeatureSelect}
+            style={{ flexWrap: "wrap" }}
+          >
+            {features.map((feature) => (
+              <ToggleButton key={feature.f_id} value={feature.featureName}>
+                {feature.featureName}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          <Button type="submit" variant="contained" color="primary" sx={{ mt: 2 }}>
+            {submitLoading ? <CircularProgress size={24} /> : "Add Product"}
+          </Button>
+        </form>
+        {successMessage && <Alert severity="success">{successMessage}</Alert>}
+      </Box>
+      <Grid container spacing={2}>
+        <Grid item xs={8}>
+          <Card>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Product ID</TableCell>
+                  <TableCell>Product Name</TableCell>
+                  <TableCell>Features</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {Object.values(groupedProducts).map((product) => (
+                  <TableRow
+                    key={product.productId}
+                    onClick={() => handleProductSelect(product)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <TableCell>{product.productId}</TableCell>
+                    <TableCell>{product.productName}</TableCell>
+                    <TableCell>{product.features.join(", ")}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </Grid>
+        <Grid item xs={4}>
+          <Card>
+            <CardContent>
+              {selectedProduct ? (
+                <>
+                  <Typography variant="h6">Product Details</Typography>
+                  <Typography variant="subtitle1">
+                    Product ID: {selectedProduct.productId}
+                  </Typography>
+                  <Typography variant="subtitle1">
+                    Product Name: {selectedProduct.productName}
+                  </Typography>
+                  <Typography variant="subtitle1">Features:</Typography>
+                  {selectedProduct.features.map((feat, index) => (
+                    <Typography key={index}>- {feat}</Typography>
+                  ))}
+                </>
+              ) : (
+                <Typography variant="h6">
+                  Select a product to view details
+                </Typography>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+      <ToastContainer />
+    </Container>
+  );
+};
+
+export default ProductPage;

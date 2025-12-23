@@ -1,0 +1,162 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}@import url('https://fonts.googleapis.com/css2?family=Cedarville+Cursive&family=Dancing+Script:wght@500&family=Tajawal:wght@200&display=swap');
+
+.dancing-script-title {
+    font-family: "Dancing Script", cursive;
+    font-weight: 700;
+    font-style: normal;
+}
+.title-log {
+    font-family: "Dancing Script", cursive;
+    font-weight: 700;
+    font-style: normal;
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    color: #fff;
+    font-size: 36px;
+    z-index: 1;
+}
+.tajawal-medium-container {
+    font-family: "Tajawal", sans-serif;
+    font-weight: 500;
+    font-style: normal;
+} 
+
+
+.login-container {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.container {
+    width: 367px;
+    padding: 20px;
+    background-color: #fff;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-image: linear-gradient(to right, #00e99a, #00c3ce, #00abee) 10 round;
+    border-image-slice: 1;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+.Abhinav h2 {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 24px;
+    background: linear-gradient(to right, #00e99a, #00c3ce, #00abee);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+form {
+    display: flex;
+    flex-direction: column;
+    border: 2px solid transparent;
+    padding: 20px;
+}
+input[type="text"],input[type="email"],
+input[type="password"],
+button {
+    margin-bottom: 6px;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    background-color: rgba(255, 255, 255, 0.9);
+    transition: background-color 0.3s ease;
+}
+input[type="text"]:focus,
+input[type="password"]:focus {
+    background-color: rgba(255, 255, 255, 0.95);
+}
+.login_button
+ {
+    background: linear-gradient(to right, #00e99a, #00c3ce, #00abee);
+    color: #fff;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    border: none;
+}
+.sign_button
+ {
+    background: linear-gradient(to right, #00e99a, #00c3ce, #00abee);
+    color: #fff;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    border: none;
+}
+button:hover {
+    background: linear-gradient(to right,  #00abee, #00c3ce, #00e99a);
+}
+.message {
+    text-align: center;
+    margin-top: 20px;
+}
+.ip:hover {
+    border-image: linear-gradient(to right,#00abee, #00c3ce, #00e99a );
+    border-image-slice: 1;
+}
+input[type="text"]:focus,
+input[type="password"]:focus {
+    border-color: blue;
+    background-color: rgba(255, 255, 255, 0.95);
+} 
+
+
+.Abhinav {
+    position: relative;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .logo1 {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 150px; /* Adjust the size as needed */
+  }
+  
+  .login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
+  
+  .container {
+    background: #fff; /* Change the background color if needed */
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  }
+  
+  h2 {
+    margin-bottom: 20px;
+  }
+  
+  .ip {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  
+  .login_button {
+    width: 100%;
+    padding: 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+
+  
